@@ -1,0 +1,18 @@
+name: CI
+
+# revisa que el docker-compose este bien escrito cada vez que se sube algo a main, avance o final
+on:
+  push:
+    branches: [main, avance, final]
+  pull_request:
+    branches: [main]
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bajar el codigo
+        uses: actions/checkout@v4
+
+      - name: Validar docker-compose.yml
+        run: docker compose --env-file .env.example config --quiet

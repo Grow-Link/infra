@@ -1,0 +1,111 @@
+# GrowLink completo en local: 3 servicios, cada uno con su base de datos, y el front con nginx.
+# Los servicios se construyen desde las carpetas de al lado (../usuarios-service, ../cursos-service,
+# ../trivia-service y ../GrowLink-FRONTEND), con la rama que tengas en cada una.
+# Para cambiar de rama en todos: ./scripts/cambiar-rama.sh avance
+#
+#   cp .env.example .env
+#   docker compose up --build
+#   abrir http://localhost:3000
+
+name: growlink
+
+services:
+  db-usuarios:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: growlink
+      POSTGRES_USER: growlink
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-growlink}
+    volumes:
+      - usuarios_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U growlink -d growlink"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  db-cursos:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cursos
+      POSTGRES_USER: growlink
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-growlink}
+    volumes:
+      - cursos_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U growlink -d cursos"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  db-trivia:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: trivia
+      POSTGRES_USER: growlink
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-growlink}
+    volumes:
+      - trivia_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U growlink -d trivia"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  usuarios-service:
+    build: ../usuarios-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db-usuarios:5432/growlink
+      SPRING_DATASOURCE_USERNAME: growlink
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-growlink}
+      GROWLINK_JWT_SECRET: ${GROWLINK_JWT_SECRET:?falta GROWLINK_JWT_SECRET en el .env}
+      GROWLINK_INTERNAL_KEY: ${GROWLINK_INTERNAL_KEY:?falta GROWLINK_INTERNAL_KEY en el .env}
+      GROWLINK_CURSOS_SERVICE_URL: http://cursos-service:8086
+    depends_on:
+      db-usuarios:
+        condition: service_healthy
+
+  cursos-service:
+    build: ../cursos-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db-cursos:5432/cursos
+      SPRING_DATASOURCE_USERNAME: growlink
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-growlink}
+      GROWLINK_JWT_SECRET: ${GROWLINK_JWT_SECRET:?falta GROWLINK_JWT_SECRET en el .env}
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
+    depends_on:
+      db-cursos:
+        condition: service_healthy
+
+  trivia-service:
+    build: ../trivia-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db-trivia:5432/trivia
+      SPRING_DATASOURCE_USERNAME: growlink
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-growlink}
+      GROWLINK_JWT_SECRET: ${GROWLINK_JWT_SECRET:?falta GROWLINK_JWT_SECRET en el .env}
+      GROWLINK_INTERNAL_KEY: ${GROWLINK_INTERNAL_KEY:?falta GROWLINK_INTERNAL_KEY en el .env}
+      USUARIOS_BASE_URL: http://usuarios-service:8080
+      CURSOS_BASE_URL: http://cursos-service:8086
+    depends_on:
+      db-trivia:
+        condition: service_healthy
+
+  frontend:
+    build: ../GrowLink-FRONTEND
+    environment:
+      USUARIOS_URL: http://usuarios-service:8080
+      CURSOS_URL: http://cursos-service:8086
+      TRIVIA_URL: http://trivia-service:8085
+      DNS_RESOLVER: 127.0.0.11
+    ports:
+      - "3000:80"
+    depends_on:
+      - usuarios-service
+      - cursos-service
+      - trivia-service
+
+volumes:
+  usuarios_data:
+  cursos_data:
+  trivia_data:
