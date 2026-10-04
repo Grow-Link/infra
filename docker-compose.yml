@@ -1,15 +1,38 @@
-# GrowLink completo en local: 3 servicios, cada uno con su base de datos, y el front con nginx.
+# GrowLink completo en local: 3 servicios con varias replicas cada uno, cada servicio con su
+# base de datos, un RabbitMQ para que las replicas de trivia compartan los mensajes en vivo,
+# y el front con nginx repartiendo la carga.
 # Los servicios se construyen desde las carpetas de al lado (../usuarios-service, ../cursos-service,
 # ../trivia-service y ../GrowLink-FRONTEND), con la rama que tengas en cada una.
-# Para cambiar de rama en todos: ./scripts/cambiar-rama.sh avance
+# Para cambiar de rama en todos: ./scripts/cambiar-rama.sh final
 #
 #   cp .env.example .env
 #   docker compose up --build
 #   abrir http://localhost:3000
+#
+# Cuantas replicas de cada servicio se cambia en el .env (USUARIOS_REPLICAS, CURSOS_REPLICAS,
+# TRIVIA_REPLICAS), o en caliente con: docker compose up -d --scale trivia-service=4
 
 name: growlink
 
 services:
+  # broker compartido para el WebSocket de trivia. Sin esto, un mensaje que sale por una replica
+  # no le llega a los jugadores conectados a otra. Se usa el protocolo STOMP del plugin de RabbitMQ.
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      # con el usuario guest RabbitMQ solo deja entrar desde la misma maquina, por eso uno propio
+      RABBITMQ_DEFAULT_USER: growlink
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-growlink}
+    volumes:
+      - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    ports:
+      - "15672:15672" # panel de administracion de RabbitMQ
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   db-usuarios:
     image: postgres:16-alpine
     environment:
@@ -61,6 +84,8 @@ services:
       GROWLINK_JWT_SECRET: ${GROWLINK_JWT_SECRET:?falta GROWLINK_JWT_SECRET en el .env}
       GROWLINK_INTERNAL_KEY: ${GROWLINK_INTERNAL_KEY:?falta GROWLINK_INTERNAL_KEY en el .env}
       GROWLINK_CURSOS_SERVICE_URL: http://cursos-service:8086
+    deploy:
+      replicas: ${USUARIOS_REPLICAS:-2}
     depends_on:
       db-usuarios:
         condition: service_healthy
@@ -73,6 +98,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-growlink}
       GROWLINK_JWT_SECRET: ${GROWLINK_JWT_SECRET:?falta GROWLINK_JWT_SECRET en el .env}
       CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
+    deploy:
+      replicas: ${CURSOS_REPLICAS:-2}
     depends_on:
       db-cursos:
         condition: service_healthy
@@ -87,8 +114,18 @@ services:
       GROWLINK_INTERNAL_KEY: ${GROWLINK_INTERNAL_KEY:?falta GROWLINK_INTERNAL_KEY en el .env}
       USUARIOS_BASE_URL: http://usuarios-service:8080
       CURSOS_BASE_URL: http://cursos-service:8086
+      # con varias replicas el broker en memoria no sirve, se usa RabbitMQ
+      TRIVIA_BROKER_RELAY_ENABLED: "true"
+      TRIVIA_BROKER_RELAY_HOST: rabbitmq
+      TRIVIA_BROKER_RELAY_PORT: "61613"
+      TRIVIA_BROKER_RELAY_USERNAME: growlink
+      TRIVIA_BROKER_RELAY_PASSWORD: ${RABBITMQ_PASSWORD:-growlink}
+    deploy:
+      replicas: ${TRIVIA_REPLICAS:-3}
     depends_on:
       db-trivia:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
   frontend:

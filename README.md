@@ -12,6 +12,7 @@ flowchart LR
     F -->|/api-usuarios| US[usuarios-service]
     F -->|/api-cursos| CS[cursos-service]
     F -->|/api-trivia y /ws-trivia| TS[trivia-service]
+    TS <-->|mensajes en vivo entre replicas| MQ{{RabbitMQ}}
     US --> DBU[(Postgres usuarios)]
     CS --> DBC[(Postgres cursos)]
     TS --> DBT[(Postgres trivia)]
@@ -61,19 +62,59 @@ en la carpeta `Growlink`.
 
 ```bash
 cp .env.example .env       # y cambiar los secretos del .env
-docker compose up --build
+./scripts/levantar.sh
 ```
 
 Abrir http://localhost:3000 y entrar con uno de los tres usuarios de prueba.
+
+`levantar.sh` arranca primero una replica de cada servicio y despues sube las
+demas. No es capricho: cada servicio, al arrancar sobre una base vacia, mete sus
+datos de prueba si todavia no hay nada, y si varias replicas arrancan al mismo
+tiempo todas ven la base vacia y los datos se duplican.
 
 Para construir una version distinta, cambiar de rama en todos los repos a la vez:
 
 ```bash
 ./scripts/cambiar-rama.sh avance
-docker compose up --build
+./scripts/levantar.sh
 ```
 
 El script no cambia nada si algun repo tiene cambios sin guardar.
+
+## Balanceo y disponibilidad
+
+En esta rama cada servicio corre con varias replicas (usuarios 2, cursos 2,
+trivia 3, se cambia en el `.env`).
+
+- **Reparto de carga**: nginx (el del front) resuelve el nombre de cada servicio
+  en cada peticion y reparte entre todas las replicas. Si una no contesta, la
+  peticion se reintenta en otra. Cada respuesta trae el header `X-Instancia` con
+  la replica que la atendio, asi se ve el balanceo con `curl -i`.
+- **Los servicios no guardan nada en memoria**: la sesion es un JWT que cualquier
+  replica puede validar, y el estado de las salas y las partidas esta en la
+  base de datos. Por eso cualquier replica atiende cualquier peticion.
+- **Concurrencia entre replicas**: lo que ya protegia a los servicios dentro de
+  una sola instancia (UPDATE atomico para iniciar la partida y para marcar al
+  primer acertante, lock de fila al responder, suma atomica de trivias ganadas)
+  funciona igual entre replicas, porque el candado es de la base de datos y no
+  de la memoria de cada proceso.
+- **WebSocket de la trivia**: con una sola instancia el broker de mensajes vive en
+  memoria. Con varias, un mensaje que sale por una replica no le llega a los
+  jugadores conectados a otra. Por eso en esta rama trivia usa RabbitMQ como
+  broker compartido (relay STOMP). Se prende con `TRIVIA_BROKER_RELAY_ENABLED`.
+
+### Prueba de fuego
+
+```bash
+./scripts/prueba-de-fuego.sh
+```
+
+Para cada servicio manda peticiones y cuenta que replica atiende cada una, mata
+una replica con `docker kill`, vuelve a mandar peticiones para comprobar que
+ninguna falle, y la levanta otra vez. Es la demostracion de disponibilidad y
+balanceo. Para verlo en vivo con una partida: abrir una sala con dos navegadores,
+y mientras se juega correr `docker kill` sobre una replica de trivia
+(`docker compose ps trivia-service` para ver cuales hay).
 
 ## Desplegar en Azure
 
@@ -101,6 +142,15 @@ escalado y el balanceador incluidos.
 6. **Front**: `USUARIOS_URL`, `CURSOS_URL` y `TRIVIA_URL` con las direcciones
    `https://...azurewebsites.net` de cada servicio, y `DNS_RESOLVER=168.63.129.16`.
 7. **trivia**: prender **Web sockets** (Configuration > General settings).
+   Para escalar a mas de una instancia hace falta un broker compartido:
+   `TRIVIA_BROKER_RELAY_ENABLED=true` y `TRIVIA_BROKER_RELAY_HOST`, `_PORT`,
+   `_USERNAME`, `_PASSWORD` apuntando a un RabbitMQ con el plugin STOMP
+   (en Azure no hay uno administrado, se puede correr en un Azure Container
+   Instance con la imagen `rabbitmq:3.13-management-alpine` y el plugin
+   `rabbitmq_stomp`, o usar un servicio como CloudAMQP).
+   Con el broker listo, subir el numero de instancias en el plan (Scale out) y
+   App Service reparte la carga solo. La primera vez dejar una sola instancia hasta
+   que arranquen los servicios, para que no se dupliquen los datos de prueba.
 8. **GitHub**: en cada repo, Settings > Environments, crear `actual`, `avance` y
    `final`. En cada ambiente:
    - variable `AZURE_WEBAPP_NAME` con el nombre de la Web App de ese ambiente.
@@ -111,8 +161,11 @@ escalado y el balanceador incluidos.
 ## Que falta confirmar
 
 Esto se escribio sin tener acceso a una suscripcion de Azure ni a un Docker
-corriendo, asi que ni los workflows de despliegue ni el `docker-compose.yml`
-completo se han probado de punta a punta. Lo que si esta probado: las pruebas de
-cada servicio y que el front compile. Si algo del despliegue falla, lo mas
-probable es un nombre de variable o un puerto, y se arregla en la Web App sin
-tocar codigo.
+corriendo, asi que ni los workflows de despliegue, ni el `docker-compose.yml`
+completo, ni los scripts, ni el relay hacia RabbitMQ se han probado de punta a
+punta. Lo que si esta probado: las pruebas de cada servicio (incluyendo las de
+concurrencia con hilos reales), que el front compile y que el compose sea valido.
+Lo primero que hay que hacer con Docker disponible es correr `./scripts/levantar.sh`
+y despues `./scripts/prueba-de-fuego.sh`. Si algo falla, lo mas probable es un
+nombre de variable, un puerto, o el formato de los destinos STOMP en RabbitMQ, y
+se arregla sin tocar la logica del juego.
