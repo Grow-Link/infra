@@ -1,0 +1,12 @@
+{
+  "name": "growlink-prueba-de-humo",
+  "private": true,
+  "type": "module",
+  "description": "Juega una partida de trivia completa contra los servicios y revisa que todo se conecte",
+  "scripts": {
+    "humo": "node humo.mjs"
+  },
+  "dependencies": {
+    "@stomp/stompjs": "^7.3.0"
+  }
+}

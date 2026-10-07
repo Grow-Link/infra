@@ -103,6 +103,22 @@ trivia 3, se cambia en el `.env`).
   jugadores conectados a otra. Por eso en esta rama trivia usa RabbitMQ como
   broker compartido (relay STOMP). Se prende con `TRIVIA_BROKER_RELAY_ENABLED`.
 
+### Prueba de humo
+
+```bash
+cd scripts/humo
+npm install
+npm run humo
+```
+
+Recorre el sistema de punta a punta contra los servicios de verdad (hace falta
+Node 22 o mas nuevo): login, que el token de usuarios sirva en cursos y trivia, que
+un admin pueda dar de baja un curso ajeno, roadmap y Home, una partida de trivia
+completa con dos jugadores por WebSocket, y que lo que deja la partida llegue a
+los otros servicios (trivia ganada en el perfil, metricas en el dashboard).
+Funciona igual contra los servicios directos (por defecto) que contra el compose
+completo: ver las variables `URL_*` al principio de `humo.mjs`.
+
 ### Prueba de fuego
 
 ```bash
@@ -162,9 +178,15 @@ escalado y el balanceador incluidos.
 
 Esto se escribio sin tener acceso a una suscripcion de Azure ni a un Docker
 corriendo, asi que ni los workflows de despliegue, ni el `docker-compose.yml`
-completo, ni los scripts, ni el relay hacia RabbitMQ se han probado de punta a
-punta. Lo que si esta probado: las pruebas de cada servicio (incluyendo las de
+completo, ni los scripts de levantar y de prueba de fuego, ni el relay hacia
+RabbitMQ se han probado de punta a punta.
+
+Lo que si esta probado: las pruebas de cada servicio (incluyendo las de
 concurrencia con hilos reales), que el front compile y que el compose sea valido.
+Ademas la prueba de humo (`scripts/humo`) se corrio con los tres servicios
+juntos (bases en memoria) directo y a traves del proxy de desarrollo del front,
+incluido el WebSocket, y paso completa. El panel del admin se reviso en el
+navegador.
 Lo primero que hay que hacer con Docker disponible es correr `./scripts/levantar.sh`
 y despues `./scripts/prueba-de-fuego.sh`. Si algo falla, lo mas probable es un
 nombre de variable, un puerto, o el formato de los destinos STOMP en RabbitMQ, y
