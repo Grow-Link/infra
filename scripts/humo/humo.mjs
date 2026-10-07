@@ -89,6 +89,13 @@ const gen = await pedir(CURSOS, '/api/roadmap/generar', {
   cuerpo: { usuarioId: 1, metas: 'Quiero ser backend developer', intereses: ['INGENIERIA_SISTEMAS'], nivel: 'PRINCIPIANTE' },
 });
 revisar(gen.estado === 201 && gen.datos.cursos.length > 0, `roadmap generado con ${gen.datos?.cursos?.length} cursos`, `generar roadmap respondio ${gen.estado}`);
+revisar(
+  gen.datos?.generadoPor === 'IA' || gen.datos?.generadoPor === 'RESPALDO',
+  `el roadmap dice quien lo genero: ${gen.datos?.generadoPor} ${gen.datos?.generadoPor === 'RESPALDO' ? '(sin IA, falta CLAUDE_API_KEY en cursos-service)' : ''}`,
+  'el roadmap no trae generadoPor'
+);
+const ajeno = await pedir(CURSOS, '/api/roadmap/mio?usuarioId=1', { token: daniela });
+revisar(ajeno.estado === 403, 'Daniela no puede leer el roadmap de Ana (403)', `Daniela recibio ${ajeno.estado} al pedir el roadmap de Ana`);
 const home = await pedir(USUARIOS, '/api/home/estado', { token: ana });
 revisar(home.datos?.estado === 'CON_ROADMAP', 'el Home de Ana pasa a CON_ROADMAP', `el Home dice ${home.datos?.estado}`);
 
