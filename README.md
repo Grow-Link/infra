@@ -57,6 +57,22 @@ desplegar solo la que toque.
 
 ## Correr todo en local
 
+### Sin Docker (lo mas rapido, para probar y hacer demos)
+
+Desde la carpeta `Growlink`, en PowerShell:
+
+```powershell
+.\infra\scripts\demo-sin-docker.ps1
+```
+
+Levanta los tres servicios (con las bases de datos en memoria) y el front, y abre
+http://localhost:5173. Hace falta Java 21, Maven y Node 22. Se apaga con
+`.\infra\scripts\demo-sin-docker.ps1 -Parar`. Como las bases viven en memoria, al
+apagar se pierde lo que se haya hecho (los usuarios y cursos de prueba se vuelven a
+crear solos). Con `CLAUDE_API_KEY` puesta en el entorno, el roadmap usa la IA real.
+
+### Con Docker
+
 Hace falta Docker. Los repos tienen que estar uno al lado del otro, como estan
 en la carpeta `Growlink`.
 
