@@ -112,7 +112,7 @@ function conectar(usuarioId, alMensaje) {
   return new Promise((resolve, reject) => {
     const cliente = new Client({ brokerURL: WS, reconnectDelay: 0 });
     cliente.onConnect = () => {
-      cliente.subscribe(`/topic/salas/${codigo}`, (m) => alMensaje(JSON.parse(m.body)));
+      cliente.subscribe(`/topic/salas.${codigo}`, (m) => alMensaje(JSON.parse(m.body)));
       resolve(cliente);
     };
     cliente.onStompError = (f) => reject(new Error(f.headers.message));

@@ -4,6 +4,43 @@ Aqui vive todo lo que hace falta para correr y desplegar GrowLink completo:
 el `docker-compose.yml` para levantar todo en local, los scripts, y la guia
 de como se despliega a Azure. El codigo de cada parte esta en su propio repo.
 
+## Si eres nueva en el proyecto (empieza aqui)
+
+1. Clona los cinco repos **en la misma carpeta** (el compose y los scripts esperan que
+   esten uno al lado del otro):
+   `usuarios-service`, `cursos-service`, `trivia-service`, `GrowLink-FRONTEND` e `infra`,
+   todos de la organizacion `Grow-Link` en GitHub. Todo el trabajo esta en la rama `main`.
+2. Escoge como correrlo (mas detalle abajo, en "Correr todo en local"):
+   - **Sin Docker** (lo mas rapido): `.\infra\scripts\demo-sin-docker.ps1` desde la carpeta
+     que contiene los repos. Hace falta Java 21, Maven y Node 22.
+   - **Con Docker** (con replicas y balanceo): `cp .env.example .env` y `./scripts/levantar.sh`
+     desde Git Bash, dentro de `infra`.
+3. Para que el roadmap use la IA de verdad hace falta una llave de la API de Claude
+   (ver la siguiente seccion). Sin llave todo funciona igual, pero en modo de respaldo.
+
+### La llave de Claude
+
+Cada persona que corra el proyecto con IA necesita **una llave de API** (se crea en la consola de
+desarrolladores de Anthropic; es un cobro por uso aparte de Claude Pro, con saldo prepagado, y un
+roadmap cuesta unos centavos de dolar). Reglas para no tener problemas:
+
+- La llave **nunca va en un archivo que se suba a git**, ni en el codigo, ni en un chat. Si hay que
+  compartir una, que sea por un canal privado. Cada una puede crear la suya.
+- Donde se pone, segun como corras el proyecto:
+
+| Como lo corres | Donde va la llave |
+|---|---|
+| Sin Docker (Windows) | Variable de usuario, una sola vez: `[Environment]::SetEnvironmentVariable('CLAUDE_API_KEY', 'tu-llave', 'User')` |
+| Con Docker | En `infra/.env`, en la linea `CLAUDE_API_KEY=` (el `.env` esta ignorado por git) |
+| Azure | Variable de entorno `CLAUDE_API_KEY` de la app de `cursos-service` |
+
+- Al levantar, tanto `demo-sin-docker.ps1` como `levantar.sh` dicen en la primera linea si la
+  IA quedo **ACTIVADA** o **SIN LLAVE**. Si dice sin llave y acabas de guardar la variable de Windows,
+  abre una terminal nueva (las ventanas ya abiertas no ven variables recien guardadas).
+- Para saber como se genero un roadmap, mira el texto verde de la pantalla Roadmap: dice
+  "generado por IA" o "modo de respaldo (sin IA)". Si cae al respaldo con llave puesta, el log de
+  `cursos-service` dice el motivo (saldo, llave invalida, etc.).
+
 ## Como esta armado
 
 ```mermaid
@@ -192,18 +229,22 @@ escalado y el balanceador incluidos.
 
 ## Que falta confirmar
 
-Esto se escribio sin tener acceso a una suscripcion de Azure ni a un Docker
-corriendo, asi que ni los workflows de despliegue, ni el `docker-compose.yml`
-completo, ni los scripts de levantar y de prueba de fuego, ni el relay hacia
-RabbitMQ se han probado de punta a punta.
+**Probado de verdad (en una maquina con Docker):**
+- `./scripts/levantar.sh` con las replicas (usuarios 2, cursos 2, trivia 3), RabbitMQ y el nginx del front.
+- La prueba de humo (`scripts/humo`) a traves del nginx: login, roles entre servicios, roadmap generado
+  por la IA real de Claude, y una partida de trivia completa por WebSocket pasando por el RabbitMQ.
+- `./scripts/prueba-de-fuego.sh`: se tumba una replica de cada servicio y ninguna peticion falla.
+- Las pruebas de cada servicio (incluyendo las de concurrencia con hilos reales) y que el front compile.
 
-Lo que si esta probado: las pruebas de cada servicio (incluyendo las de
-concurrencia con hilos reales), que el front compile y que el compose sea valido.
-Ademas la prueba de humo (`scripts/humo`) se corrio con los tres servicios
-juntos (bases en memoria) directo y a traves del proxy de desarrollo del front,
-incluido el WebSocket, y paso completa. El panel del admin se reviso en el
-navegador.
-Lo primero que hay que hacer con Docker disponible es correr `./scripts/levantar.sh`
-y despues `./scripts/prueba-de-fuego.sh`. Si algo falla, lo mas probable es un
-nombre de variable, un puerto, o el formato de los destinos STOMP en RabbitMQ, y
-se arregla sin tocar la logica del juego.
+Correr todo esto de verdad encontro cuatro errores que las pruebas automaticas no veian, todos ya
+corregidos: el nginx del front tenia una directiva repetida y un `set` despues de un `rewrite`
+(no arrancaba / no encontraba el servicio), RabbitMQ rechazaba los destinos `/topic/salas/CODIGO`
+(ahora son `/topic/salas.CODIGO`), y el servidor avisaba a los jugadores antes de confirmar el
+guardado en la base de datos (ahora avisa despues), lo que con replicas hacia que la respuesta de un
+jugador llegara a una replica que aun no veia la pregunta.
+
+**Sin probar:** el despliegue a Azure (los workflows `cd.yml` y la configuracion de las App Service)
+no se ha corrido, porque hace falta una suscripcion de Azure. Si falla, lo mas probable es un nombre
+de variable o un puerto, y se arregla en la configuracion de la Web App sin tocar el codigo.
+Tampoco se probo que una partida en curso sobreviva a la caida de la replica a la que estaban
+conectados los jugadores (el estado esta en la base de datos, pero el reconectar del front no se verifico).

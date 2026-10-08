@@ -15,7 +15,18 @@ if [[ ! -f .env ]]; then
   echo "Falta el archivo .env, copia el .env.example: cp .env.example .env" >&2
   exit 1
 fi
+# la llave de Claude se puede poner en el .env o como variable de entorno de tu terminal; si el
+# .env la trae vacia, no se debe borrar la que ya estaba en el entorno
+LLAVE_DEL_ENTORNO="${CLAUDE_API_KEY:-}"
 set -a; source .env; set +a
+if [[ -z "${CLAUDE_API_KEY:-}" && -n "$LLAVE_DEL_ENTORNO" ]]; then
+  export CLAUDE_API_KEY="$LLAVE_DEL_ENTORNO"
+fi
+if [[ -n "${CLAUDE_API_KEY:-}" ]]; then
+  echo "IA: ACTIVADA (se encontro CLAUDE_API_KEY, el roadmap se genera con Claude)"
+else
+  echo "IA: SIN LLAVE (CLAUDE_API_KEY vacia, el roadmap sale en modo de respaldo sin IA)"
+fi
 
 URL="${URL:-http://localhost:3000}"
 USUARIOS="${USUARIOS_REPLICAS:-2}"
