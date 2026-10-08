@@ -31,6 +31,18 @@ if ($ocupados) {
     return
 }
 
+# La llave de Claude: si la guardaste como variable de Windows DESPUES de abrir esta ventana (o VS Code),
+# esta ventana no la ve, aunque Windows la tenga guardada. Por eso se lee directo de donde Windows la guarda.
+if (-not $env:CLAUDE_API_KEY) {
+    $llaveGuardada = [Environment]::GetEnvironmentVariable("CLAUDE_API_KEY", "User")
+    if ($llaveGuardada) { $env:CLAUDE_API_KEY = $llaveGuardada }
+}
+if ($env:CLAUDE_API_KEY) {
+    Write-Host "IA: ACTIVADA (se encontro CLAUDE_API_KEY, el roadmap se genera con Claude)" -ForegroundColor Green
+} else {
+    Write-Host "IA: SIN LLAVE (no hay CLAUDE_API_KEY, el roadmap sale en modo de respaldo sin IA)" -ForegroundColor Yellow
+}
+
 # el mismo secreto en los tres servicios, asi el token de uno sirve en los otros
 $env:GROWLINK_JWT_SECRET = "clave-de-demo-local-de-minimo-32-caracteres-xx"
 $env:GROWLINK_INTERNAL_KEY = "llave-interna-de-demo"
