@@ -167,7 +167,7 @@ npm run humo
 Recorre el sistema de punta a punta contra los servicios de verdad (hace falta
 Node 22 o mas nuevo): login, que el token de usuarios sirva en cursos y trivia, que
 un admin pueda dar de baja un curso ajeno, roadmap y Home, una partida de trivia
-completa con dos jugadores por WebSocket, y que lo que deja la partida llegue a
+completa con **seis jugadores a la vez** por WebSocket (la prueba de concurrencia), el control de metas sin sentido, el examen sin respuestas filtradas, un reto entre dos personas, y que lo que deja la partida llegue a
 los otros servicios (trivia ganada en el perfil, metricas en el dashboard).
 Funciona igual contra los servicios directos (por defecto) que contra el compose
 completo: ver las variables `URL_*` al principio de `humo.mjs`.
