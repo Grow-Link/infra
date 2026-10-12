@@ -53,24 +53,38 @@ flowchart LR
     US --> DBU[(Postgres usuarios)]
     CS --> DBC[(Postgres cursos)]
     TS --> DBT[(Postgres trivia)]
-    TS -->|suma trivia ganada| US
+    TS -->|suma trivia ganada y una gota al jardin| US
     TS -->|categorias del publicador| CS
-    US -->|estado del roadmap| CS
+    US -->|estado del roadmap y roadmaps completados, para las semillas| CS
     CS -->|roadmap y prerequisitos con IA| CL([API de Claude])
 ```
 
 Son 3 microservicios, cada uno con su propia base de datos, mas el front. Los
 tres validan el mismo JWT, que firma usuarios-service. Los llamados entre
 servicios que no vienen de un usuario (trivia avisando una victoria) se
-identifican con una llave interna.
+identifican con una llave interna; usuarios-service, en cambio, le pregunta a
+cursos-service por los roadmaps completados de la persona con el mismo JWT
+que ya traía la petición (no hace falta la llave interna para eso).
 
 | Repo | Que hace |
 |---|---|
-| `usuarios-service` | Login, perfil, home segun el rol, contador de trivias ganadas |
+| `usuarios-service` | Login, perfil, home segun el rol, contador de trivias ganadas, jardin gamificado |
 | `cursos-service` | Cursos, prerequisitos, habilidades, completados y roadmap con IA |
 | `trivia-service` | Salas de trivia en tiempo real (WebSocket), preguntas, metricas para el admin |
 | `GrowLink-FRONTEND` | La app web, con nginx como entrada unica |
 | `infra` | Este repo |
+
+### El jardin gamificado
+
+Todo el estado del jardin vive en usuarios-service, nada en localStorage ni en datos de mentira:
+
+| Evento | Que pasa |
+|---|---|
+| Se completa un roadmap entero | Aparece una semilla (usuarios-service le pregunta a cursos-service por los roadmaps completados con `GET /api/roadmap/completados`) |
+| Se gana una partida de trivia | Trivia-service llama al mismo endpoint interno que ya suma la trivia ganada, y ahora tambien deja una gota |
+| La persona entra al jardin | `GET /api/jardin` devuelve gotas, semillas sin plantar y plantas, y de paso sincroniza semillas nuevas desde los roadmaps recien completados (sin duplicar las que ya tenia) |
+| Plantar una semilla | `POST /api/jardin/plantas/{id}/plantar` (en un espacio libre del jardin) |
+| Regar una planta | `POST /api/jardin/plantas/{id}/regar`, gasta una gota; con tres riegos la planta llega a FLORECIDA; regarla de nuevo responde 409 |
 
 ## Ramas y ambientes
 
@@ -167,10 +181,20 @@ npm run humo
 Recorre el sistema de punta a punta contra los servicios de verdad (hace falta
 Node 22 o mas nuevo): login, que el token de usuarios sirva en cursos y trivia, que
 un admin pueda dar de baja un curso ajeno, roadmap y Home, una partida de trivia
-completa con **seis jugadores a la vez** por WebSocket (la prueba de concurrencia), el control de metas sin sentido, el examen sin respuestas filtradas, un reto entre dos personas, y que lo que deja la partida llegue a
-los otros servicios (trivia ganada en el perfil, metricas en el dashboard).
+completa con **seis jugadores a la vez** por WebSocket (la prueba de concurrencia), el control de metas sin sentido, el examen sin respuestas filtradas, un reto entre dos personas, lo que deja la partida en
+los otros servicios (trivia ganada en el perfil, metricas en el dashboard), y el
+jardin completo: el admin termina un roadmap para que le salga una semilla (y que
+un segundo `GET /api/jardin` no la duplique), la persona la planta, junta gotas
+ganando duelos de trivia de a dos, riega tres veces hasta FLORECIDA y un cuarto
+riego se rechaza con 409.
 Funciona igual contra los servicios directos (por defecto) que contra el compose
 completo: ver las variables `URL_*` al principio de `humo.mjs`.
+
+La seccion del jardin necesita que tambien esten mergeadas a `main` las ramas
+`feat/garden` de `cursos-service` (el endpoint `GET /api/roadmap/completados`) y
+de `usuarios-service` (`GET/POST /api/jardin`); hasta entonces falla con 404. Una
+vez mergeadas, correr otra vez `npm run humo` (o `npm run humo` dentro de
+`scripts/humo` como arriba) para confirmar que el jardin completo pasa.
 
 ### Prueba de fuego
 

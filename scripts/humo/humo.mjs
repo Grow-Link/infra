@@ -10,6 +10,10 @@
 //
 // Usa los usuarios de prueba: Ana (1), Daniela (4), Esteban (5, ya con roadmap y 3 cursos aprobados),
 // Fernanda (6), Gabriel (7), Helena (8) y Carla (3, admin). La trivia se juega con SEIS personas a la vez.
+//
+// La seccion del jardin (usuarios-service) necesita que tambien esten mergeadas las ramas feat/garden de
+// cursos-service (GET /api/roadmap/completados) y el endpoint GET/POST /api/jardin de usuarios-service;
+// hasta entonces esa seccion falla con 404.
 
 import { Client } from '@stomp/stompjs';
 
@@ -157,11 +161,11 @@ const sala = await pedir(TRIVIA, '/api/salas', {
 revisar(sala.estado === 201, `sala ${sala.datos?.codigo} creada`, `crear sala respondio ${sala.estado}`);
 const codigo = sala.datos.codigo;
 
-function conectar(alMensaje) {
+function conectar(codigoSala, alMensaje) {
   return new Promise((resolve, reject) => {
     const cliente = new Client({ brokerURL: WS, reconnectDelay: 0 });
     cliente.onConnect = () => {
-      cliente.subscribe(`/topic/salas.${codigo}`, (m) => alMensaje(JSON.parse(m.body)));
+      cliente.subscribe(`/topic/salas.${codigoSala}`, (m) => alMensaje(JSON.parse(m.body)));
       resolve(cliente);
     };
     cliente.onStompError = (f) => reject(new Error(f.headers.message));
@@ -170,53 +174,58 @@ function conectar(alMensaje) {
   });
 }
 
-const inicio = Date.now();
-const resultado = await new Promise(async (resolve, reject) => {
-  const limite = setTimeout(() => reject(new Error('la partida no termino en 90 segundos')), 90000);
-  const clientes = [];
-  const recibieronFinal = new Set();
-  const contestadas = new Map(); // usuario -> preguntas que ya contesto
-  let final = null;
+// Conecta a cada jugador por WebSocket, todos contestan al azar en cuanto llega la pregunta (la prueba es la
+// concurrencia, no el puntaje) y resuelve con los resultados finales. La reusan la partida de seis personas y,
+// mas abajo, los duelos del jardin.
+function jugarPartida(codigoSala, jugadores, limiteMs = 90000) {
+  return new Promise(async (resolve, reject) => {
+    const limite = setTimeout(() => reject(new Error(`la partida ${codigoSala} no termino en ${limiteMs / 1000} segundos`)), limiteMs);
+    const clientes = [];
+    const recibieronFinal = new Set();
+    const contestadas = new Map(); // usuario -> preguntas que ya contesto
+    let final = null;
 
-  const terminar = () => {
-    clearTimeout(limite);
-    clientes.forEach((c) => c.deactivate());
-    resolve({ final, recibieronFinal });
-  };
+    const terminar = () => {
+      clearTimeout(limite);
+      clientes.forEach((c) => c.deactivate());
+      resolve({ final, recibieronFinal });
+    };
 
-  try {
-    for (const j of JUGADORES) {
-      contestadas.set(j.id, new Set());
-      const cliente = await conectar((mensaje) => {
-        if (mensaje.type === 'PREGUNTA' && !contestadas.get(j.id).has(mensaje.indice)) {
-          contestadas.get(j.id).add(mensaje.indice);
-          // todos contestan al mismo tiempo, con una opcion al azar: la prueba es la concurrencia, no el puntaje
-          cliente.publish({
-            destination: `/app/salas/${codigo}/responder`,
-            body: JSON.stringify({ usuarioId: j.id, indice: mensaje.indice, opcionElegida: Math.floor(Math.random() * 4) }),
-          });
-        }
-        if (mensaje.type === 'RESULTADOS_FINALES') {
-          recibieronFinal.add(j.id);
-          final = mensaje;
-          if (recibieronFinal.size === JUGADORES.length) terminar();
-        }
-        if (mensaje.type === 'ERROR' && !/sala_participante/i.test(mensaje.message)) {
-          clearTimeout(limite);
-          reject(new Error(`trivia-service aviso un error: ${mensaje.message}`));
-        }
-      });
-      clientes.push(cliente);
-      cliente.publish({ destination: `/app/salas/${codigo}/unirse`, body: JSON.stringify({ usuarioId: j.id, nombre: j.nombre }) });
+    try {
+      for (const j of jugadores) {
+        contestadas.set(j.id, new Set());
+        const cliente = await conectar(codigoSala, (mensaje) => {
+          if (mensaje.type === 'PREGUNTA' && !contestadas.get(j.id).has(mensaje.indice)) {
+            contestadas.get(j.id).add(mensaje.indice);
+            cliente.publish({
+              destination: `/app/salas/${codigoSala}/responder`,
+              body: JSON.stringify({ usuarioId: j.id, indice: mensaje.indice, opcionElegida: Math.floor(Math.random() * 4) }),
+            });
+          }
+          if (mensaje.type === 'RESULTADOS_FINALES') {
+            recibieronFinal.add(j.id);
+            final = mensaje;
+            if (recibieronFinal.size === jugadores.length) terminar();
+          }
+          if (mensaje.type === 'ERROR' && !/sala_participante/i.test(mensaje.message)) {
+            clearTimeout(limite);
+            reject(new Error(`trivia-service aviso un error: ${mensaje.message}`));
+          }
+        });
+        clientes.push(cliente);
+        cliente.publish({ destination: `/app/salas/${codigoSala}/unirse`, body: JSON.stringify({ usuarioId: j.id, nombre: j.nombre }) });
+      }
+      await new Promise((r) => setTimeout(r, 800));
+      clientes[0].publish({ destination: `/app/salas/${codigoSala}/iniciar`, body: '' });
+    } catch (e) {
+      clearTimeout(limite);
+      reject(e);
     }
-    await new Promise((r) => setTimeout(r, 800));
-    clientes[0].publish({ destination: `/app/salas/${codigo}/iniciar`, body: '' });
-  } catch (e) {
-    clearTimeout(limite);
-    reject(e);
-  }
-});
-const { final, recibieronFinal } = resultado;
+  });
+}
+
+const inicio = Date.now();
+const { final, recibieronFinal } = await jugarPartida(codigo, JUGADORES);
 revisar(recibieronFinal.size === JUGADORES.length, `los ${JUGADORES.length} jugadores recibieron los resultados finales (en ${Math.round((Date.now() - inicio) / 1000)} s)`, `solo ${recibieronFinal.size} recibieron los resultados`);
 revisar(final.ranking.length === JUGADORES.length, `el ranking final tiene a los ${JUGADORES.length}`, `el ranking tiene ${final.ranking.length} jugadores`);
 revisar(final.ranking.every((r, i, a) => i === 0 || a[i - 1].puntos >= r.puntos), 'el ranking viene ordenado por puntos', 'el ranking esta desordenado');
@@ -245,6 +254,60 @@ const d0 = dashAntes.datos;
 const d1 = dashDespues.datos;
 revisar(d1.partidasFinalizadas >= d0.partidasFinalizadas + 1, `el dashboard cuenta la partida (${d1.partidasFinalizadas} finalizadas)`, 'el dashboard no cambio');
 revisar(d1.latenciaPromedioMs !== null, `latencia promedio a la primera respuesta: ${Math.round(d1.latenciaPromedioMs)} ms`, 'no hay latencia registrada');
+
+// ---------------------------------------------------------------------------------------------
+console.log('\n7. Jardin: una semilla por roadmap completado, una gota por trivia ganada (usuarios-service)');
+
+// Semilla: el admin completa TODO lo que le falta a Ana de "regenerado" (su roadmap sin el curso dado de baja,
+// armado en la seccion 3). Nadie mas puede forzar un curso como completado sin examen (ya se probo arriba con
+// "forzado"), por eso lo hace Carla.
+for (const c of regenerado.datos.cursos) {
+  const completar = await pedir(CURSOS, `/api/cursos/${c.cursoId}/completar`, { metodo: 'POST', token: carla, cuerpo: { usuarioId: 1 } });
+  if (completar.estado !== 201) mal(`el admin no pudo completar "${c.titulo}" para que Ana termine el roadmap: ${completar.estado}`);
+}
+const jardinTrasCompletar = await pedir(USUARIOS, '/api/jardin', { token: ana });
+const semilla = jardinTrasCompletar.datos?.semillas?.find((s) => s.roadmapId === regenerado.datos.id);
+revisar(jardinTrasCompletar.estado === 200 && semilla, 'al terminar el roadmap le aparece una semilla a Ana', `el jardin de Ana no tiene semilla del roadmap (${jardinTrasCompletar.estado})`);
+
+const jardinOtraVez = await pedir(USUARIOS, '/api/jardin', { token: ana });
+const semillasDelRoadmap = (jardinOtraVez.datos?.semillas ?? []).filter((s) => s.roadmapId === regenerado.datos.id);
+revisar(semillasDelRoadmap.length === 1, 'un segundo GET /api/jardin no duplica la semilla', `salieron ${semillasDelRoadmap.length} semillas del mismo roadmap`);
+
+// Plantar: el primer espacio libre del jardin de Ana. Con 0 riegos la etapa sigue siendo SEMILLA
+// (sube a BROTE, PLANTA y FLORECIDA con el primer, segundo y tercer riego)
+const plantada = await pedir(USUARIOS, `/api/jardin/plantas/${semilla.id}/plantar`, { metodo: 'POST', token: ana, cuerpo: { espacio: 0 } });
+revisar(plantada.estado === 200 && plantada.datos?.etapa === 'SEMILLA' && plantada.datos?.espacio === 0, `la semilla se planto en el espacio 0`, `plantar la semilla respondio ${plantada.estado} (etapa ${plantada.datos?.etapa})`);
+const plantaId = plantada.datos?.id;
+
+// Gotas: un duelo de dos personas (como el reto de la seccion 4, pero jugado) por WebSocket. Nadie ve las
+// respuestas correctas, asi que no se puede forzar quien gana; se repite el duelo hasta que a Ana le alcancen
+// las gotas para los tres riegos (cuentan tambien las que ya tuviera, por ejemplo si gano la partida de seis).
+async function gotasDeAna() {
+  return (await pedir(USUARIOS, '/api/jardin', { token: ana })).datos.gotas;
+}
+let duelos = 0;
+while ((await gotasDeAna()) < 3 && duelos < 15) {
+  duelos++;
+  const sala2 = await pedir(TRIVIA, '/api/salas', {
+    metodo: 'POST',
+    cuerpo: { categoria: 'INGENIERIA_SISTEMAS', hostUsuarioId: 1, hostNombre: 'Ana Torres', numPreguntas: 15, duracionSegundos: 20 },
+  });
+  await jugarPartida(sala2.datos.codigo, [JUGADORES[0], JUGADORES[1]]); // Ana y Daniela, solo dos
+}
+revisar(duelos < 15, `Ana junto al menos 3 gotas ganando trivias (${duelos} duelo(s) jugados)`, `Ana no llego a 3 gotas tras ${duelos} duelos`);
+
+// Regar tres veces: SEMILLA -> BROTE -> PLANTA -> FLORECIDA, cada riego gasta una gota
+const etapaEsperada = ['BROTE', 'PLANTA', 'FLORECIDA'];
+let planta;
+for (let i = 1; i <= 3; i++) {
+  const riego = await pedir(USUARIOS, `/api/jardin/plantas/${plantaId}/regar`, { metodo: 'POST', token: ana });
+  planta = riego.datos?.planta;
+  revisar(riego.estado === 200 && planta?.etapa === etapaEsperada[i - 1], `riego ${i} de 3 aplicado, la planta pasa a ${etapaEsperada[i - 1]}`, `el riego ${i} respondio ${riego.estado} (etapa ${planta?.etapa})`);
+}
+
+// Un cuarto riego sobre una planta ya florecida se rechaza
+const cuartoRiego = await pedir(USUARIOS, `/api/jardin/plantas/${plantaId}/regar`, { metodo: 'POST', token: ana });
+revisar(cuartoRiego.estado === 409, 'un cuarto riego sobre una planta florecida se rechaza (409)', `el cuarto riego respondio ${cuartoRiego.estado}`);
 
 console.log(fallos === 0 ? '\nTODO BIEN: el sistema funciona de punta a punta.\n' : `\n${fallos} cosa(s) fallaron, revisa arriba.\n`);
 process.exit(fallos === 0 ? 0 : 1);
