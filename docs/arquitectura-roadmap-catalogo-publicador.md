@@ -115,6 +115,14 @@ Y no se arregla con `temperature = 0`: los modelos nuevos de Claude **rechazan**
 - **No repetir:** la regla 10 del prompt pide poner **un solo** curso cuando dos cubren lo mismo; el otro queda como alternativa.
 - **"Ya lo sé":** un curso bloqueado ofrece «Ya lo sé: presentar examen». El examen se califica en el servidor (70 %); si se aprueba, el curso queda completado sin pasar por sus prerrequisitos.
 
+### 3.6d Lo que ya aprobó antes de tener roadmap
+Los exámenes del catálogo se pueden presentar **sin roadmap**. La regla del equipo (anti-*farming* del jardín, `RoadmapService.sinCompletados`) es que **un roadmap nuevo solo ofrece cursos que la persona aún no completó**:
+- **Qué pasa con lo aprobado:** sale del catálogo que ven la IA y el respaldo. No se repite en la ruta, **no gasta el tiempo** (el tope cuenta solo lo que falta) y **no bloquea** a quien lo necesitaba como prerrequisito (para quien arma la ruta ese curso ya no existe). Sigue en el historial de aprobados.
+- **Por qué no se mete en la ruta como "hecho":** el jardín da una semilla solo si **todos** los cursos del roadmap se completan **después** de crearlo (`RoadmapService.completados`). Un roadmap con un curso ya aprobado nunca podría ganarla.
+- **Si ya completó todo lo de un área:** 422 «Ya completaste todos los cursos de…».
+- **Se le dice a la persona (front):** `fetchRoadmap` calcula `aprobadosAntes` (aprobados de las áreas de la ruta, con fecha anterior a la creación del roadmap, que no están en la ruta) y «¿Por qué esta ruta?» los lista: «Lo que ya habías aprobado no se repite…».
+- **Aprobado y luego dado de baja (front):** el nodo sigue `completed` (lo aprobado no se pierde, cuenta para el avance y abre lo que sigue) pero lleva `dadoDeBaja`: se marca «Ya no disponible» y aparece el aviso para actualizar el roadmap. Antes ese caso no se avisaba porque el estado «completado» tapaba al de «baja».
+
 ### 3.7 Lo que se guarda y cómo se lee
 - `Roadmap` (meta, nivel, `generadoPor`, resumen, áreas, tiempo) y `RoadmapCurso` (curso, orden, razón).
 - `mio` lee el **más reciente** (`findFirstByUsuarioIdOrderByCreadoEnDesc`). Regenerar no borra los anteriores.
@@ -164,7 +172,8 @@ Y no se arregla con `temperature = 0`: los modelos nuevos de Claude **rechazan**
 
 - `fetchRoadmap` + `construirRoadmap` (`roadmapModel.ts:146`): une lo que manda el servidor con lo que ya aprobó la persona.
   - **Etapa** de un curso = largo de su cadena de prerrequisitos dentro de la ruta (`etapaDe`, `:152`).
-  - **Estado**: `completed`, `current` (el primero que puede tomar), `available`, `locked`, `unavailable` (dado de baja) (`:168-174`).
+  - **Estado**: `completed`, `current` (el primero que puede tomar), `available`, `locked`, `unavailable` (dado de baja y sin aprobar) (`:168-174`). Un curso aprobado y luego dado de baja sigue `completed` pero con `dadoDeBaja = true`.
+- Pantalla del roadmap: encabezado de dos líneas, acciones en un menú «Opciones», una franja de avance (nivel, barra, logros a un toque), el mapa con una barra de herramientas de íconos (noche/día, mi paso, ver todo, zoom, leyenda a demanda; el minimapa solo si parte del mapa queda fuera de vista) y un panel del curso con lo esencial arriba y el resto en secciones plegables.
 - Onboarding (`OnboardingPage`): `crearRoadmap` (`:114`) **primero genera y luego guarda** el perfil: si la meta no sirve, no se guarda nada y puede corregirla. Los errores se clasifican por código HTTP (400 sin sentido, 422 sin cursos / sin tiempo).
 - Mapa (`MundoMap`): grafo en capas (columnas por etapa), noche/día, personaje que camina por las líneas. Ver `docs` del mapa en el propio componente.
 - Sesión: `authorizedFetch` (`backendSession.ts:105`) adjunta el token y, si responde 401/403, dispara `SESSION_EXPIRED_EVENT` y vuelve al login.
@@ -209,9 +218,11 @@ Y no se arregla con `temperature = 0`: los modelos nuevos de Claude **rechazan**
 | Plan gratuito (una sola área) | `CatalogoYRoadmapRealTest.elPlanGratuitoArmaCadaRoadmapSobreUnSoloTema` |
 | Alternativas: mismo nivel, cubren lo del paso, con examen | `lasAlternativasDeUnPasoCubrenLoMismoYAprobarlasCumpleElPaso` |
 | Cinco peticiones iguales = una llamada a la IA | `RoadmapRestriccionTest.dosPeticionesIgualesALaVezLeCuestanUnaSolaLlamadaALaIa` |
+| Lo ya aprobado no se vuelve a ofrecer y no bloquea al que lo necesitaba | `RoadmapAntiFarmingGeneracionTest.generarExcluyeCursosYaCompletadosYNoBloqueaAlQueLosNecesitaba`, `siYaCompletoTodosLosCursosDeLAreaElegidaResponde422ConMensajePropio` |
+| Un roadmap solo cuenta como completado si todo se aprobó después de crearlo | `RoadmapAntiFarmingTest`, `RoadmapCompletadosTest` |
 | Con la IA real | `infra/scripts/verificar-ia.mjs`, `verificar-plan.mjs` y `demo-baja-de-curso.mjs` |
 
-Resultado hoy: **cursos-service 54 pruebas, usuarios-service 21, todas en verde.**
+Resultado hoy: **cursos-service 70 pruebas, usuarios-service 21, todas en verde** (con `CLAUDE_API_KEY` vacía: en un equipo que tenga la llave puesta, `RoadmapAntiFarmingGeneracionTest` llamaría a la IA real porque no fuerza el modo de respaldo como las demás clases).
 
 ---
 
