@@ -18,6 +18,15 @@ de como se despliega a Azure. El codigo de cada parte esta en su propio repo.
 3. Para que el roadmap use la IA de verdad hace falta una llave de la API de Claude
    (ver la siguiente seccion). Sin llave todo funciona igual, pero en modo de respaldo.
 
+### Documentación de arquitectura
+
+- [`docs/atributos-de-calidad.md`](docs/atributos-de-calidad.md): qué atributos de calidad tiene el sistema (disponibilidad,
+  escalabilidad, seguridad, rendimiento, observabilidad…), el escenario de cada uno, cómo comprobarlo y qué falta.
+- [`docs/adr/`](docs/adr/): las decisiones de arquitectura, una por archivo (por qué microservicios, por qué JWT, por qué la IA
+  no manda, etc.).
+- [`docs/arquitectura-roadmap-catalogo-publicador.md`](docs/arquitectura-roadmap-catalogo-publicador.md): la parte del roadmap
+  y el catálogo, con clases y líneas.
+
 ### La llave de Claude
 
 Cada persona que corra el proyecto con IA necesita **una llave de API** (se crea en la consola de
