@@ -50,8 +50,12 @@ esperar() { # nombre, ruta
 
 echo "1) Primer arranque, una replica de cada servicio"
 docker compose up -d --build --scale usuarios-service=1 --scale cursos-service=1 --scale trivia-service=1
-esperar usuarios-service /api-usuarios/api/auth/usuarios
-esperar cursos-service /api-cursos/api/habilidades
+# usuarios y cursos se esperan por su sonda de readiness: da 503 mientras arrancan y SOLO da 200 cuando ya terminaron
+# de crear los datos de prueba (Spring la marca lista despues de los CommandLineRunner) y la base de datos responde.
+# Antes se esperaba a que contestara cualquier ruta, que ya contesta antes de terminar de sembrar.
+# trivia no tiene todavia esa sonda, por eso sigue esperando una ruta cualquiera.
+esperar usuarios-service /api-usuarios/actuator/health/readiness
+esperar cursos-service /api-cursos/actuator/health/readiness
 esperar trivia-service /api-trivia/api/salas/NOEXISTE
 
 echo "2) Subiendo replicas: usuarios=$USUARIOS cursos=$CURSOS trivia=$TRIVIA"

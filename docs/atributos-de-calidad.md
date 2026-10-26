@@ -19,7 +19,7 @@ Las decisiones de fondo están en [`adr/`](adr/). La parte del roadmap está exp
 | **Escalabilidad** | Se agregan réplicas sin cambiar código | Servicios sin estado (JWT) · candados en la base y no en memoria · broker compartido (RabbitMQ) | Construido |
 | **Seguridad** | Nadie actúa a nombre de otro; la IA no manda; el abuso tiene tope | Autenticación firmada (JWT) · autorización por dueño · validar todo lo que viene de la IA · límite de uso | Construido (falta rol al publicar) |
 | **Rendimiento y costo** | Misma pregunta, misma respuesta, una sola llamada a la IA | Caché de propuestas por hash · candado por clave · plazos máximos | Construido |
-| **Observabilidad** | Se puede saber qué réplica atendió, seguir una petición entre servicios y consultar la salud | `X-Instancia` · `X-Request-Id` en logs · `/actuator/health` | Construido (cursos y usuarios) |
+| **Observabilidad** | Se puede saber qué réplica atendió, seguir una petición entre servicios, consultar la salud y medir cómo se comporta el roadmap | `X-Instancia` · `X-Request-Id` en logs · `/actuator/health` · métricas del roadmap (solo ADMIN) | Construido (cursos y usuarios; métricas en cursos) |
 | **Modificabilidad** | Cambiar de IA o agregar un área no toca el servicio | Estrategia (`RoadmapAiClient`) · capas · catálogo derivado de la base | Construido |
 | **Testabilidad** | Todo lo importante se prueba sin internet ni gastar IA | IA falsa · reloj inyectable · servidor de mentira · bases en memoria | Construido |
 | **Usabilidad** | Pantallas con lo esencial, mensajes que dicen qué hacer | Divulgación progresiva · errores en lenguaje de la persona | Construido |
@@ -36,7 +36,8 @@ Las decisiones de fondo están en [`adr/`](adr/). La parte del roadmap está exp
 | **A1. Se cae una réplica** | **Estímulo:** una réplica de cursos, usuarios o trivia deja de responder. **Entorno:** operación normal con varias réplicas. **Respuesta:** nginx deja de mandarle tráfico y reintenta la petición en otra (`proxy_next_upstream`, `proxy_connect_timeout 2s`). **Medida:** ninguna petición falla. **Evidencia:** `infra/scripts/prueba-de-fuego.sh` (mata una réplica de cada servicio con `docker kill`). |
 | **A2. La IA no responde o responde mal** | **Estímulo:** Claude se cae, tarda, devuelve un curso inventado o se pasa del tiempo. **Respuesta:** se usa el algoritmo de respaldo; el roadmap sale igual y dice quién lo armó. **Medida:** 200/201 con `generadoPor = RESPALDO`, nunca un error ni una ruta inventada. **Evidencia:** `RoadmapRestriccionTest` (IA falsa que falla, inventa o se pasa). |
 | **A3. cursos-service se cuelga** | **Estímulo:** cursos-service no cae pero deja de contestar. **Respuesta:** usuarios-service lo espera como máximo 2 s para conectar y 3 s para leer (configurable) y sigue sin su respuesta: el Home muestra "sin roadmap" y el jardín una lista vacía. **Medida:** la pantalla responde en menos de unos pocos segundos en vez de quedarse esperando. **Evidencia:** `CursosServiceClientCalidadTest` (un servidor de verdad que tarda más que el plazo). |
-| **A4. ¿Está viva y lista esta réplica?** | **Estímulo:** el balanceador o Azure consultan la salud. **Respuesta:** `/actuator/health` responde `UP` sin credenciales y sin filtrar detalles; `/liveness` dice si el proceso vive y `/readiness` si puede atender (incluye la base de datos). **Evidencia:** `CalidadDeServicioTest` en cursos-service y usuarios-service. |
+| **A4. ¿Está viva y lista esta réplica?** | **Estímulo:** el balanceador o Azure consultan la salud. **Respuesta:** `/actuator/health` responde `UP` sin credenciales y sin filtrar detalles; `/liveness` dice si el proceso vive y `/readiness` si puede atender (incluye la base de datos). **Evidencia:** `CalidadDeServicioTest` en cursos-service y usuarios-service. **Quién la consulta:** `docker-compose` (`healthcheck` de usuarios y cursos, visible como `(healthy)` en `docker compose ps`), `levantar.sh` (espera esta sonda antes de subir más réplicas) y el health check de Azure (ver el README de `infra`, paso 8). |
+| **A5. Arrancar varias réplicas sin duplicar los datos de prueba** | **Estímulo:** `levantar.sh` sube la primera réplica y debe esperar a que termine de crear los datos de prueba antes de subir las demás. **Respuesta:** espera la sonda `/readiness`, que Spring solo marca lista **después** de los `CommandLineRunner`, y no cualquier ruta que ya conteste. **Medida:** medido en cursos-service, una ruta cualquiera respondía a los 11,48 s y `/readiness` recién dio 200 a los 11,89 s, cuando terminó de sembrar: esa ventana es la que duplicaba datos. |
 
 ### Escalabilidad
 
@@ -72,6 +73,7 @@ Las decisiones de fondo están en [`adr/`](adr/). La parte del roadmap está exp
 |---|---|
 | **O1. ¿Qué réplica atendió esto?** | Cada respuesta trae `X-Instancia`, incluso las rechazadas (401/403). **Evidencia:** `InstanciaHeaderTest`. |
 | **O2. Seguir una petición entre servicios** | nginx le pone a cada petición un `X-Request-Id` (el que mande el navegador se ignora); cada servicio lo respeta si es válido, lo muestra en cada línea del log (`[rid=...]`), lo devuelve en la respuesta y usuarios-service lo reenvía a cursos-service. Una búsqueda de ese id en los logs recorre toda la petición. **Evidencia:** `CalidadDeServicioTest` y `CursosServiceClientCalidadTest.laLlamadaLlevaElIdentificadorDeLaPeticionQueLaOrigino`. |
+| **O3. ¿Cuánto resuelve la IA y cuánto el respaldo? ¿Sirve la caché?** | **Estímulo:** alguien (el equipo, el profe) quiere saber cómo se comporta el roadmap en la práctica. **Respuesta:** cinco medidas en `/actuator/metrics` (solo ADMIN): `growlink.roadmap.generaciones{fuente}`, `.cache{resultado}`, `.ia.llamadas{resultado}` con su `.ia.duracion`, `.ia.propuestas{resultado}` y `.limite.rechazos`. **Medida:** convierte los "response measure" de este documento en números: porcentaje de roadmaps armados por la IA, tasa de aciertos de la caché, cuánto de lo que propone la IA rechaza el servidor, tiempo de las llamadas. **Evidencia:** `MetricasDeRoadmapTest` (provoca cada resultado con una IA falsa y comprueba que se cuenta una sola vez; y que sin ser ADMIN no se ve). Cuentan por réplica. |
 
 ### Modificabilidad, testabilidad, usabilidad, interoperabilidad
 
@@ -98,6 +100,18 @@ curl -i -H "X-Request-Id: mi-prueba-12345" http://localhost:8080/actuator/health
 Para ver el límite sin esperar, arrancar cursos-service con `ROADMAP_LIMITE_GENERACIONES=2` y pedir tres roadmaps
 seguidos con la misma persona: el tercero responde `429` con `Retry-After`.
 
+Para ver las métricas (hace falta el token de un ADMIN, por ejemplo el de Carla en el login de demostración):
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN_ADMIN" http://localhost:8086/actuator/metrics | grep growlink      # la lista
+curl -s -H "Authorization: Bearer $TOKEN_ADMIN" "http://localhost:8086/actuator/metrics/growlink.roadmap.generaciones?tag=fuente:RESPALDO"
+curl -s -H "Authorization: Bearer $TOKEN_ADMIN" "http://localhost:8086/actuator/metrics/growlink.roadmap.cache?tag=resultado:acierto"
+curl -i http://localhost:8086/actuator/metrics                                                              # sin token: 403
+```
+
+Para el chequeo de salud con Docker: `docker compose ps` (columna STATUS) y
+`curl http://localhost:3000/api-cursos/actuator/health/readiness`.
+
 Las pruebas: `mvn test` en cada servicio (con `CLAUDE_API_KEY` vacía para no gastar la IA), `npm run humo` en
 `infra/scripts/humo` y `infra/scripts/prueba-de-fuego.sh` (necesitan Docker).
 
@@ -108,9 +122,8 @@ Las pruebas: `mvn test` en cada servicio (con `CLAUDE_API_KEY` vacía para no ga
 | Atributo | Propuesta | Por qué ahora o después |
 |---|---|---|
 | Seguridad | Exigir rol PUBLICADOR/ADMIN al publicar (S7) | Cierra el único hueco de autorización conocido; toca tests de varios archivos |
-| Observabilidad | Lo mismo de `X-Request-Id` y salud en trivia-service | Hoy solo cursos y usuarios; trivia tiene trabajo en curso del equipo |
-| Disponibilidad | Usar `/actuator/health/readiness` en los healthchecks de `docker-compose` y en el health check de Azure | Hoy el compose solo vigila las bases y RabbitMQ |
-| Observabilidad | Métricas (Micrometer: latencia, tasa de errores, llamadas a la IA, aciertos de caché) | Permite medir los "response measure" de este documento en lugar de solo probarlos |
+| Observabilidad | Lo mismo de `X-Request-Id`, salud (y su healthcheck) en trivia-service | Hoy solo cursos y usuarios; trivia tiene trabajo en curso del equipo |
+| Observabilidad | Métricas también en usuarios-service (por ejemplo, cuántas veces el Home degradó por un cursos-service lento) y un tablero (Prometheus/Grafana) si hiciera falta mostrarlas | Hoy se leen con `curl`; un tablero solo vale la pena si se va a presentar |
 | Disponibilidad | Cortacircuitos para la IA (tras N fallos seguidos, ir directo al respaldo un rato) | Hoy cada petición espera el plazo completo si Claude está caído |
 | Rendimiento | Prueba de carga (por ejemplo k6) con una meta numérica: p95 de `GET /api/roadmap/mio` | Convierte "rápido" en un número |
 | Seguridad | Límite también por IP en el login | El login no tiene contraseña (es de demostración) |

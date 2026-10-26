@@ -86,6 +86,14 @@ services:
       GROWLINK_CURSOS_SERVICE_URL: http://cursos-service:8086
     deploy:
       replicas: ${USUARIOS_REPLICAS:-2}
+    # lista para atender = el proceso responde Y la base de datos tambien (sonda readiness de actuator).
+    # Se ve en la columna STATUS de "docker compose ps". start_period da tiempo a que arranque Spring.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 60s
     depends_on:
       db-usuarios:
         condition: service_healthy
@@ -100,6 +108,13 @@ services:
       CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
     deploy:
       replicas: ${CURSOS_REPLICAS:-2}
+    # igual que usuarios-service: lista para atender = el proceso y la base de datos responden
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8086/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 60s
     depends_on:
       db-cursos:
         condition: service_healthy

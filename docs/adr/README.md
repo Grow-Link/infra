@@ -10,7 +10,7 @@ que, meses después, nadie tenga que adivinar por qué algo es como es (ni desha
 | [0003](0003-la-ia-propone-el-servidor-decide.md) | La IA propone, el servidor valida, y hay un respaldo algorítmico | Disponibilidad, seguridad |
 | [0004](0004-cache-de-propuestas-de-la-ia.md) | Se guardan las propuestas validadas de la IA, con una clave que incluye el catálogo | Rendimiento, costo |
 | [0005](0005-un-roadmap-nuevo-no-ofrece-lo-ya-completado.md) | Un roadmap nuevo no vuelve a ofrecer lo que la persona ya completó | Integridad del jardín |
-| [0006](0006-salud-trazabilidad-y-plazos.md) | Salud consultable, identificador por petición y plazos en las llamadas entre servicios | Disponibilidad, observabilidad |
+| [0006](0006-salud-trazabilidad-y-plazos.md) | Salud consultable (y quién la usa), identificador por petición, plazos en las llamadas entre servicios y métricas del roadmap | Disponibilidad, observabilidad |
 
 Formato: **Contexto** (la fuerza que obligó a decidir) · **Decisión** · **Consecuencias** (lo bueno y lo que se paga) ·
 **Estado**. Para una decisión nueva, copiar el último archivo y cambiar el número.

@@ -179,6 +179,13 @@ trivia 3, se cambia en el `.env`).
   jugadores conectados a otra. Por eso en esta rama trivia usa RabbitMQ como
   broker compartido (relay STOMP). Se prende con `TRIVIA_BROKER_RELAY_ENABLED`.
 
+### Salud de las replicas
+
+`docker compose ps` muestra `(healthy)` en usuarios y cursos cuando la sonda
+`/actuator/health/readiness` da 200: el proceso responde **y** la base de datos tambien (y, al arrancar,
+ya terminaron de crearse los datos de prueba). Por eso `levantar.sh` espera esa sonda antes de subir las demas
+replicas. Desde afuera: `curl http://localhost:3000/api-cursos/actuator/health/readiness`.
+
 ### Prueba de humo
 
 ```bash
@@ -253,12 +260,17 @@ escalado y el balanceador incluidos.
    Con el broker listo, subir el numero de instancias en el plan (Scale out) y
    App Service reparte la carga solo. La primera vez dejar una sola instancia hasta
    que arranquen los servicios, para que no se dupliquen los datos de prueba.
-8. **GitHub**: en cada repo, Settings > Environments, crear `actual`, `avance` y
+8. **Chequeo de salud** (en `usuarios` y `cursos`; Monitoring > Health check > Enable): poner la
+   ruta `/actuator/health/readiness`. Con mas de una instancia, App Service deja de mandarle
+   trafico a la que no responda 200 (por ejemplo si perdio la base de datos) y la saca de la
+   rotacion hasta que se recupere. Es la misma sonda que usa el `docker-compose`. `trivia` todavia
+   no la tiene.
+9. **GitHub**: en cada repo, Settings > Environments, crear `actual`, `avance` y
    `final`. En cada ambiente:
    - variable `AZURE_WEBAPP_NAME` con el nombre de la Web App de ese ambiente.
    - secreto `AZURE_WEBAPP_PUBLISH_PROFILE` con el contenido del archivo que se
      baja de la Web App (Overview > Get publish profile).
-9. Hacer push a la rama y mirar la pestana Actions.
+10. Hacer push a la rama y mirar la pestana Actions.
 
 ## Que falta confirmar
 
