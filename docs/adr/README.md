@@ -11,6 +11,10 @@ que, meses después, nadie tenga que adivinar por qué algo es como es (ni desha
 | [0004](0004-cache-de-propuestas-de-la-ia.md) | Se guardan las propuestas validadas de la IA, con una clave que incluye el catálogo | Rendimiento, costo |
 | [0005](0005-un-roadmap-nuevo-no-ofrece-lo-ya-completado.md) | Un roadmap nuevo no vuelve a ofrecer lo que la persona ya completó | Integridad del jardín |
 | [0006](0006-salud-trazabilidad-y-plazos.md) | Salud consultable (y quién la usa), identificador por petición, plazos en las llamadas entre servicios y métricas del roadmap | Disponibilidad, observabilidad |
+| [0007](0007-la-identidad-la-pone-microsoft-y-el-rol-growlink.md) | La identidad la pone Microsoft Entra ID (multi-tenant, por el `sub`) y el rol lo pone GrowLink | Seguridad, interoperabilidad |
+| [0009](0009-metricas-con-prometheus-y-tableros-en-grafana.md) | Métricas con Prometheus (etiqueta `instancia`, protegidas con un token) y tres tableros en Grafana | Observabilidad, seguridad |
+| [0011](0011-tope-por-ip-y-eventos-de-seguridad.md) | Tope de peticiones por IP y cada rechazo de seguridad (401, 403, 429) contado y en el log | Seguridad, disponibilidad, observabilidad |
+| [0013](0013-pruebas-de-carga-tasa-constante-y-trivia-de-10-a-100.md) | Pruebas de carga: HTTP a tasa constante y trivia en vivo de 10 a 100 jugadores, con p50, p95 y p99 | Rendimiento, escalabilidad, disponibilidad |
 
 Formato: **Contexto** (la fuerza que obligó a decidir) · **Decisión** · **Consecuencias** (lo bueno y lo que se paga) ·
 **Estado**. Para una decisión nueva, copiar el último archivo y cambiar el número.

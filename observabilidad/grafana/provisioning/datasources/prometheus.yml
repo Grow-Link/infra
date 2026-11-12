@@ -1,0 +1,13 @@
+# La fuente de datos de los tableros: el Prometheus del docker-compose. El uid es fijo porque los tableros lo citan.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus-growlink
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      # el mismo intervalo del scrape (prometheus.yml): $__rate_interval queda en al menos 4 veces este valor
+      timeInterval: 5s

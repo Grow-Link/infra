@@ -1,6 +1,8 @@
 name: CI
 
-# revisa que el docker-compose este bien escrito cada vez que se sube algo a main, avance o final
+# revisa que el docker-compose este bien escrito, que la configuracion de Prometheus y los tableros de Grafana
+# sean validos, y corre las pruebas de las cuentas de los scripts de carga, cada vez que se sube algo a main,
+# avance o final, y tambien en los pull requests hacia main
 on:
   push:
     branches: [main, avance, final]
@@ -16,3 +18,48 @@ jobs:
 
       - name: Validar docker-compose.yml
         run: docker compose --env-file .env.example config --quiet
+
+  observabilidad:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bajar el codigo
+        uses: actions/checkout@v4
+
+      # con el mismo promtool de la imagen que usa el compose
+      - name: Validar la configuracion de Prometheus
+        run: >-
+          docker run --rm --entrypoint /bin/promtool
+          -v "$PWD/observabilidad/prometheus:/cfg:ro"
+          prom/prometheus:v3.15.1 check config /cfg/prometheus.yml
+
+      # un JSON roto no deja que Grafana cargue el tablero, y lo dice solo en su log
+      - name: Validar los tableros de Grafana
+        run: |
+          for tablero in observabilidad/grafana/dashboards/*.json; do
+            python3 -c "import json, sys; d = json.load(open(sys.argv[1])); assert d['uid'] and d['title'] and d['panels'], sys.argv[1]" "$tablero"
+            echo "ok $tablero"
+          done
+
+  pruebas-de-carga:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts/carga
+    steps:
+      - name: Bajar el codigo
+        uses: actions/checkout@v4
+
+      - name: Instalar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/carga/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci --no-audit --no-fund
+
+      # solo las cuentas (percentiles, linea de tiempo, reparto en salas): las pruebas de carga de verdad necesitan
+      # los servicios levantados y se corren a mano (ver el README)
+      - name: Probar las cuentas de los scripts de carga
+        run: npm test

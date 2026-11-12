@@ -1,0 +1,13 @@
+# Los tres tableros de GrowLink (negocio, tecnico por instancia y seguridad) se cargan solos desde los JSON de
+# observabilidad/grafana/dashboards. Se pueden editar en la interfaz para probar, pero lo que vale es el JSON del
+# repo: para guardar un cambio, exportar el tablero (Share > Export) y reemplazar su archivo.
+apiVersion: 1
+providers:
+  - name: growlink
+    folder: GrowLink
+    type: file
+    disableDeletion: true
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards

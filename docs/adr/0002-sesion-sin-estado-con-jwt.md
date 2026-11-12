@@ -18,4 +18,6 @@ de fila), no de la memoria del proceso.
   de que venza (dura 24 h por defecto).
 - (−) Solo se puede usar lo que sirva en cualquier réplica: por eso el límite de uso de la IA cuenta por réplica (ver
   `LimiteDeGeneraciones`) en lugar de compartir un contador.
-- Pendiente: el login es de demostración (se elige un usuario sembrado, sin contraseña).
+- Pendiente: el login es de demostración (se elige un usuario sembrado, sin contraseña). Con `AUTH_MODE=oidc` la
+  identidad la pone Microsoft (ver [0007](0007-la-identidad-la-pone-microsoft-y-el-rol-growlink.md)); el de
+  demostración (`legacy`) sigue siendo el modo por defecto.

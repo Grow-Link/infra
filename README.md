@@ -225,6 +225,94 @@ balanceo. Para verlo en vivo con una partida: abrir una sala con dos navegadores
 y mientras se juega correr `docker kill` sobre una replica de trivia
 (`docker compose ps trivia-service` para ver cuales hay).
 
+## Tableros (Prometheus y Grafana)
+
+Con el compose levantado, **http://localhost:3001** tiene los tres tableros de GrowLink (carpeta *GrowLink*), sin
+iniciar sesion (solo lectura; para editar, el usuario `admin` con `GRAFANA_ADMIN_PASSWORD` del `.env`). Prometheus
+queda en http://localhost:9090. Los dos escuchan solo en esta maquina. La decision completa esta en el
+[ADR-0009](docs/adr/0009-metricas-con-prometheus-y-tableros-en-grafana.md).
+
+| Tablero | Que muestra |
+|---|---|
+| **Negocio** | Sesiones iniciadas (por modo), cursos completados (por area y por via: examen o admin), roadmaps por quien los armo (IA o respaldo), salas, partidas y jugadores de trivia, y quien esta conectado ahora |
+| **Tecnico por instancia** | Por servicio y por replica: si responden, peticiones por segundo, latencia p95 y media, errores 5xx, reparto del trafico, CPU, memoria, conexiones a la base en uso y esperando, hilos y WebSockets abiertos |
+| **Eventos de seguridad** | 401, 403 y 429 por servicio, por replica y por ruta, y los contadores propios de usuarios y cursos (ver ADR-0011) |
+
+Como llegan los datos:
+
+- Cada servicio publica `/actuator/prometheus` con la etiqueta `instancia` en todas sus metricas (la misma que la
+  cabecera `X-Instancia`). Prometheus raspa **cada replica** cada 5 s: el DNS de Docker le da una IP por replica, asi
+  que una replica nueva (`docker compose up -d --scale trivia-service=4`) aparece sola y una caida queda en `up = 0`.
+- `/actuator/prometheus` solo contesta con la cabecera `X-Metricas-Token: <METRICAS_TOKEN>`. Sin ella, 401 (403 en
+  cursos-service en modo legacy). Sin `METRICAS_TOKEN` en el `.env` el compose no arranca. Para mirar las metricas
+  crudas de una replica: `curl -H "X-Metricas-Token: $METRICAS_TOKEN" http://localhost:3000/api-cursos/actuator/prometheus`.
+- Los tableros y la fuente de datos se cargan solos desde `observabilidad/grafana`. Un cambio hecho en la interfaz
+  se pierde al recrear el contenedor: para guardarlo, exportar el tablero (*Share > Export*) y reemplazar su JSON.
+- Los contadores cuentan por replica y se reinician con cada arranque; los tableros los suman y Prometheus compensa
+  los reinicios. El p95 del tablero es aproximado (cubetas fijas de 10 ms a 10 s); el exacto de una prueba lo dan los
+  scripts de carga.
+
+En **Azure** esto no funciona tal cual: desde afuera, la URL de un servicio cae en la instancia que elija el
+balanceador, asi que un Prometheus no puede raspar cada instancia. Esta anotado como pendiente en el ADR-0009 (que
+cada instancia empuje sus metricas a un Prometheus administrado, y los mismos tableros lo lean).
+
+## Pruebas de carga
+
+Dos scripts de Node 22 en `scripts/carga`, con p50, p95 y p99. La decision, las metas y la linea base estan en el
+[ADR-0013](docs/adr/0013-pruebas-de-carga-tasa-constante-y-trivia-de-10-a-100.md).
+
+```bash
+cd scripts/carga
+npm install
+npm run http      # 20 peticiones por segundo durante 60 s contra los tres servicios
+npm run trivia    # partidas de trivia por WebSocket con 10, 25, 50, 75 y 100 jugadores a la vez
+npm test          # solo las cuentas (percentiles, linea de tiempo), sin servicios
+```
+
+Antes de correrlas, en el ambiente que se prueba:
+
+- **`AUTH_MODE=legacy`**: los scripts entran con el login de demostracion; con Microsoft no hay forma de sacar
+  tokens para cien personas de mentira.
+- **`LIMITE_IP_MAXIMO_POR_MINUTO=0`** (o alto, en el `.env` o en la App Service): toda la carga sale de una IP, y por
+  encima de 5 peticiones por segundo el tope empieza a responder 429. El reporte avisa si los vio.
+
+**`npm run http`** manda una tasa constante de verdad: cada peticion sale a su hora aunque las anteriores no hayan
+contestado. Solo hace lecturas, asi que se puede repetir. Dice los percentiles por peticion, las fallas por motivo,
+que replica atendio cada una y, segundo a segundo, cuantas salieron y fallaron.
+
+| Variable | Por defecto | Para que |
+|---|---|---|
+| `TASA`, `DURACION_S` | `20`, `60` | Peticiones por segundo y cuanto dura |
+| `SOLO` | (todas) | `usuarios`, `cursos` o `trivia`: solo contra ese servicio |
+| `PLAZO_MS` | `10000` | Cuanto se espera una respuesta antes de contarla como falla |
+| `META_P95_MS`, `META_ERRORES_PCT` | (sin meta) | Si se ponen, dice si se cumplio la meta y termina con codigo 1 si no |
+
+Para **medir la recuperacion al apagar una replica**: correr `DURACION_S=120 npm run http` y, a la mitad, matar una
+replica (`docker kill <contenedor>`, o detener una instancia en Azure). Al final sale la *ventana de fallas*: del
+primer al ultimo segundo con fallas, que es lo que tardo en recuperarse (o que no se recupero, si llega hasta el
+final).
+
+**`npm run trivia`** juega partidas completas, cada jugador con su propio WebSocket, en etapas con cada vez mas
+jugadores. Por etapa dice el p50, p95 y p99 de la **respuesta** (desde que el jugador contesta hasta que le llega la
+confirmacion: servidor, base de datos y broker), del **reparto** de cada pregunta dentro de la sala, de unirse, de
+conectar y de crear la sala, y cuantas partidas no terminaron. La tabla final pone las etapas lado a lado: donde
+empieza a crecer el p95 o a aparecer errores, ahi esta el cuello de botella, y el tablero tecnico dice que recurso
+se satura.
+
+| Variable | Por defecto | Para que |
+|---|---|---|
+| `ETAPAS` | `10,25,50,75,100` | Jugadores a la vez en cada etapa |
+| `POR_SALA` | `5` | Jugadores por sala (minimo 2) |
+| `PREGUNTAS`, `DURACION` | `5`, `10` | Preguntas por partida (5, 10 o 15) y segundos por pregunta (10, 15 o 20) |
+| `ESPERA_MAX_MS` | `1500` | Cuanto "piensa" como mucho cada jugador antes de contestar; `0` = todos al instante, el peor caso para los candados |
+| `USUARIO_BASE` | `900000` | Desde que id se numeran los jugadores de mentira (no existen en usuarios-service, a proposito) |
+| `META_P95_MS`, `META_ERRORES_PCT` | (sin meta) | Meta sobre el p95 de la respuesta y el % de jugadores sin resultados, en cada etapa |
+
+Los dos hablan por defecto con los servicios directos en localhost (como la prueba de humo). Con el compose, o con
+Azure, se cambian las direcciones: `URL_USUARIOS`, `URL_CURSOS`, `URL_TRIVIA` y `WS_TRIVIA`, por ejemplo
+`URL_TRIVIA=http://localhost:3000/api-trivia WS_TRIVIA=ws://localhost:3000/ws-trivia npm run trivia`. Cada corrida
+guarda su resultado en `scripts/carga/resultados/` (git lo ignora), para comparar despues 1 y 3 instancias.
+
 ## Desplegar en Azure
 
 Se repite para cada ambiente (`actual`, `avance`, `final`). Servicio recomendado
@@ -248,6 +336,8 @@ escalado y el balanceador incluidos.
    - `PORT` y `WEBSITES_PORT`: poner las dos con el puerto del servicio
      (usuarios 8080, cursos 8086, trivia 8085, front solo `WEBSITES_PORT=80`).
    - `CLAUDE_API_KEY` en cursos para el roadmap con IA.
+   - `METRICAS_TOKEN`: el mismo en las tres (minimo 16 caracteres). Sin el, `/actuator/prometheus` queda cerrado
+     (ver "Tableros").
 6. **Front**: `USUARIOS_URL`, `CURSOS_URL` y `TRIVIA_URL` con las direcciones
    `https://...azurewebsites.net` de cada servicio, y `DNS_RESOLVER=168.63.129.16`.
 7. **trivia**: prender **Web sockets** (Configuration > General settings).
@@ -260,11 +350,10 @@ escalado y el balanceador incluidos.
    Con el broker listo, subir el numero de instancias en el plan (Scale out) y
    App Service reparte la carga solo. La primera vez dejar una sola instancia hasta
    que arranquen los servicios, para que no se dupliquen los datos de prueba.
-8. **Chequeo de salud** (en `usuarios` y `cursos`; Monitoring > Health check > Enable): poner la
+8. **Chequeo de salud** (en `usuarios`, `cursos` y `trivia`; Monitoring > Health check > Enable): poner la
    ruta `/actuator/health/readiness`. Con mas de una instancia, App Service deja de mandarle
    trafico a la que no responda 200 (por ejemplo si perdio la base de datos) y la saca de la
-   rotacion hasta que se recupere. Es la misma sonda que usa el `docker-compose`. `trivia` todavia
-   no la tiene.
+   rotacion hasta que se recupere. Es la misma sonda que usa el `docker-compose`.
 9. **GitHub**: en cada repo, Settings > Environments, crear `actual`, `avance` y
    `final`. En cada ambiente:
    - variable `AZURE_WEBAPP_NAME` con el nombre de la Web App de ese ambiente.
@@ -287,6 +376,13 @@ corregidos: el nginx del front tenia una directiva repetida y un `set` despues d
 (ahora son `/topic/salas.CODIGO`), y el servidor avisaba a los jugadores antes de confirmar el
 guardado en la base de datos (ahora avisa despues), lo que con replicas hacia que la respuesta de un
 jugador llegara a una replica que aun no veia la pregunta.
+
+**Probado en local, sin Docker (12-11-2026):** con los tres servicios corriendo con Maven y H2 en memoria (como
+`demo-sin-docker.ps1`): la prueba de humo completa; `npm run http` y `npm run trivia` (las cinco etapas hasta 100
+jugadores, sin errores), y los dos avisando bien cuando un servicio se cae; Prometheus 3.15.1 raspando los tres con el
+token y Grafana 13.2.5 cargando la fuente de datos y los tres tableros, con todas sus consultas respondiendo. El
+`docker-compose.yml` con Prometheus y Grafana se valido con `docker compose config` y `promtool`, pero **no se ha
+levantado con Docker**: en esa maquina no habia Docker.
 
 **Sin probar:** el despliegue a Azure (los workflows `cd.yml` y la configuracion de las App Service)
 no se ha corrido, porque hace falta una suscripcion de Azure. Si falla, lo mas probable es un nombre

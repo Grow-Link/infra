@@ -1,0 +1,17 @@
+{
+  "name": "growlink-pruebas-de-carga",
+  "private": true,
+  "type": "module",
+  "description": "Pruebas de carga de GrowLink: HTTP a tasa constante y trivia en vivo de 10 a 100 jugadores (ver ADR-0013)",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "http": "node carga-http.mjs",
+    "trivia": "node carga-trivia.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@stomp/stompjs": "^7.3.0"
+  }
+}

@@ -1,0 +1,636 @@
+{
+  "uid": "growlink-seguridad",
+  "title": "GrowLink - Eventos de seguridad",
+  "description": "Lo que se rechaza en la puerta de los tres servicios: 401 (sin credenciales validas), 403 (pidio algo que no le toca) y 429 (tope por IP). Una subida sostenida de cualquiera es la senal de que alguien esta probando la puerta. Ver ADR-0011.",
+  "tags": [
+    "growlink"
+  ],
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "fiscalYearStartMonth": 0,
+  "liveNow": false,
+  "weekStart": "",
+  "links": [
+    {
+      "title": "Tableros de GrowLink",
+      "type": "dashboards",
+      "tags": [
+        "growlink"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true,
+      "icon": "external link",
+      "targetBlank": false,
+      "tooltip": "",
+      "url": ""
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "servicio",
+        "label": "Servicio",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus-growlink"
+        },
+        "query": {
+          "query": "label_values(up, job)",
+          "refId": "var-servicio"
+        },
+        "definition": "label_values(up, job)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "sort": 1,
+        "hide": 0,
+        "regex": "",
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "En el rango elegido",
+      "collapsed": false,
+      "id": 1,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "401 - sin credenciales validas",
+      "description": "Token que falta, vencido, mal firmado, de otro emisor o para otra aplicacion, y scrapes de metricas sin el token. El motivo exacto queda en el log, con el rid de la peticion.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-growlink"
+      },
+      "id": 2,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-growlink"
+          },
+          "expr": "sum(increase(http_server_requests_seconds_count{job=~\"$servicio\", status=\"401\"}[$__range]))",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "403 - prohibido",
+      "description": "Pedir el rol ADMIN sin estar en la lista, una llave interna que no cuadra, o una regla de autorizacion que dijo no. En cursos-service en modo legacy, una peticion sin token tambien es 403.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-growlink"
+      },
+      "id": 3,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-growlink"
+          },
+          "expr": "sum(increase(http_server_requests_seconds_count{job=~\"$servicio\", status=\"403\"}[$__range]))",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "429 - tope por IP",
+      "description": "Peticiones frenadas por el tope por IP (300 por minuto por defecto). Tambien salen aqui si se corre una prueba de carga sin subir el tope.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-growlink"
+      },
+      "id": 4,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-growlink"
+          },
+          "expr": "sum(increase(http_server_requests_seconds_count{job=~\"$servicio\", status=\"429\"}[$__range]))",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Pedidos de ADMIN rechazados y llaves internas malas",
+      "description": "Contador propio de usuarios-service (growlink.seguridad.prohibidos).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-growlink"
+      },
+      "id": 5,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-growlink"
+          },
+          "expr": "sum(increase(growlink_seguridad_prohibidos_total{job=~\"$servicio\"}[$__range]))",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "row",
+      "title": "En el tiempo",
+      "collapsed": false,
+      "id": 6,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Rechazos por minuto, por servicio y codigo",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-growlink"
+      },
+      "id": 7,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-growlink"
+          },
+          "expr": "sum by (job, status) (rate(http_server_requests_seconds_count{job=~\"$servicio\", status=~\"401|403|429\"}[$__rate_interval])) * 60",
+          "legendFormat": "{{job}} {{status}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Eventos de seguridad contados por los servicios, por minuto",
+      "description": "Los contadores propios (MetricasDeSeguridad en usuarios-service y el tope por IP de usuarios y cursos). Cada evento deja ademas una linea WARN en el log con el rid.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-growlink"
+      },
+      "id": 8,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-growlink"
+          },
+          "expr": "sum by (job) (rate(growlink_seguridad_tokens_invalidos_total{job=~\"$servicio\"}[$__rate_interval])) * 60",
+          "legendFormat": "tokens invalidos ({{job}})",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-growlink"
+          },
+          "expr": "sum by (job) (rate(growlink_seguridad_prohibidos_total{job=~\"$servicio\"}[$__rate_interval])) * 60",
+          "legendFormat": "prohibidos ({{job}})",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-growlink"
+          },
+          "expr": "sum by (job) (rate(growlink_http_limite_ip_rechazos_total{job=~\"$servicio\"}[$__rate_interval])) * 60",
+          "legendFormat": "tope por IP ({{job}})",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Rechazos por replica en el rango",
+      "description": "Si todo cae en una sola replica, puede ser un cliente pegado a ella o una replica mal configurada (por ejemplo, otro emisor o audiencia).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-growlink"
+      },
+      "id": 9,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-growlink"
+          },
+          "expr": "sum by (job, instancia) (increase(http_server_requests_seconds_count{job=~\"$servicio\", status=~\"401|403|429\"}[$__range]))",
+          "legendFormat": "{{job}} {{instancia}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "type": "table",
+      "title": "Rutas mas rechazadas en el rango",
+      "description": "UNKNOWN = la peticion se rechazo antes de saber a que ruta iba.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-growlink"
+      },
+      "id": 10,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-growlink"
+          },
+          "expr": "topk(10, sum by (job, uri, status) (increase(http_server_requests_seconds_count{job=~\"$servicio\", status=~\"401|403|429\"}[$__range])) > 0)",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Value",
+            "desc": true
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "job": "servicio",
+              "uri": "ruta",
+              "status": "codigo",
+              "Value": "rechazos"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "title": "Que no sale aqui",
+      "id": 11,
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "- Un **CONNECT de STOMP rechazado** en trivia-service (modo oidc) no es una respuesta HTTP: se ve en el log de trivia, no en estos paneles.\n- Los contadores **cuentan por replica y se reinician** con cada arranque; los paneles los suman y Prometheus compensa los reinicios.\n- El tope por IP confia en el primer valor de `X-Forwarded-For` (pendiente en ADR-0011)."
+      }
+    }
+  ]
+}

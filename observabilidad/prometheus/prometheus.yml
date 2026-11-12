@@ -1,0 +1,47 @@
+# Prometheus del docker-compose (ver ADR-0009 y el README, seccion "Tableros"). Raspa CADA replica de los tres
+# servicios por separado: el DNS de Docker devuelve una IP por replica del nombre del servicio, y dns_sd_configs las
+# vuelve a preguntar cada 10 s, asi que una replica nueva (docker compose up --scale ...) entra sola y una que se cae
+# aparece como up = 0.
+#
+# /actuator/prometheus solo contesta con el token del scrape en la cabecera X-Metricas-Token. El token no esta
+# escrito aqui: lo lee del archivo que deja el arranque del contenedor con la variable METRICAS_TOKEN del .env
+# (ver docker-compose.yml).
+
+global:
+  # cada 5 s: una prueba de carga dura pocos minutos y con 15 s no se alcanzaria a ver como sube y baja
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: usuarios-service
+    metrics_path: /actuator/prometheus
+    http_headers:
+      X-Metricas-Token:
+        files: [/tmp/metricas-token]
+    dns_sd_configs:
+      - names: [usuarios-service]
+        type: A
+        port: 8080
+        refresh_interval: 10s
+
+  - job_name: cursos-service
+    metrics_path: /actuator/prometheus
+    http_headers:
+      X-Metricas-Token:
+        files: [/tmp/metricas-token]
+    dns_sd_configs:
+      - names: [cursos-service]
+        type: A
+        port: 8086
+        refresh_interval: 10s
+
+  - job_name: trivia-service
+    metrics_path: /actuator/prometheus
+    http_headers:
+      X-Metricas-Token:
+        files: [/tmp/metricas-token]
+    dns_sd_configs:
+      - names: [trivia-service]
+        type: A
+        port: 8085
+        refresh_interval: 10s

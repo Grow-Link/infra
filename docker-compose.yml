@@ -9,6 +9,9 @@
 #   docker compose up --build
 #   abrir http://localhost:3000
 #
+# Los tableros (Grafana) quedan en http://localhost:3001 y Prometheus en http://localhost:9090, solo desde esta
+# maquina (ver la seccion "Tableros" del README y el ADR-0009).
+#
 # Cuantas replicas de cada servicio se cambia en el .env (USUARIOS_REPLICAS, CURSOS_REPLICAS,
 # TRIVIA_REPLICAS), o en caliente con: docker compose up -d --scale trivia-service=4
 
@@ -84,6 +87,10 @@ services:
       GROWLINK_JWT_SECRET: ${GROWLINK_JWT_SECRET:?falta GROWLINK_JWT_SECRET en el .env}
       GROWLINK_INTERNAL_KEY: ${GROWLINK_INTERNAL_KEY:?falta GROWLINK_INTERNAL_KEY en el .env}
       GROWLINK_CURSOS_SERVICE_URL: http://cursos-service:8086
+      # el token con el que Prometheus lee /actuator/prometheus (el mismo en los tres servicios)
+      METRICAS_TOKEN: ${METRICAS_TOKEN:?falta METRICAS_TOKEN en el .env}
+      # tope de peticiones por IP: para una prueba de carga desde una sola maquina hay que subirlo o ponerlo en 0
+      LIMITE_IP_MAXIMO_POR_MINUTO: ${LIMITE_IP_MAXIMO_POR_MINUTO:-300}
     deploy:
       replicas: ${USUARIOS_REPLICAS:-2}
     # lista para atender = el proceso responde Y la base de datos tambien (sonda readiness de actuator).
@@ -106,6 +113,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-growlink}
       GROWLINK_JWT_SECRET: ${GROWLINK_JWT_SECRET:?falta GROWLINK_JWT_SECRET en el .env}
       CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
+      METRICAS_TOKEN: ${METRICAS_TOKEN:?falta METRICAS_TOKEN en el .env}
+      LIMITE_IP_MAXIMO_POR_MINUTO: ${LIMITE_IP_MAXIMO_POR_MINUTO:-300}
     deploy:
       replicas: ${CURSOS_REPLICAS:-2}
     # igual que usuarios-service: lista para atender = el proceso y la base de datos responden
@@ -135,8 +144,17 @@ services:
       TRIVIA_BROKER_RELAY_PORT: "61613"
       TRIVIA_BROKER_RELAY_USERNAME: growlink
       TRIVIA_BROKER_RELAY_PASSWORD: ${RABBITMQ_PASSWORD:-growlink}
+      METRICAS_TOKEN: ${METRICAS_TOKEN:?falta METRICAS_TOKEN en el .env}
     deploy:
       replicas: ${TRIVIA_REPLICAS:-3}
+    # la misma sonda readiness que usuarios y cursos: la replica arranco y ya puede atender (se ve como (healthy)
+    # en la columna STATUS de "docker compose ps")
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8085/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 60s
     depends_on:
       db-trivia:
         condition: service_healthy
@@ -157,7 +175,54 @@ services:
       - cursos-service
       - trivia-service
 
+  # raspa cada replica de los tres servicios (ver observabilidad/prometheus/prometheus.yml y el ADR-0009)
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    # Prometheus no lee variables de entorno en su configuracion: el arranque pasa METRICAS_TOKEN a un archivo, y
+    # prometheus.yml lo manda en la cabecera X-Metricas-Token (http_headers.files). Asi el token no queda escrito
+    # en ningun archivo del repo
+    entrypoint:
+      - /bin/sh
+      - -c
+      - printf '%s' "$$METRICAS_TOKEN" > /tmp/metricas-token && exec /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=7d
+    environment:
+      METRICAS_TOKEN: ${METRICAS_TOKEN:?falta METRICAS_TOKEN en el .env}
+    volumes:
+      - ./observabilidad/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      # solo desde esta maquina: la interfaz de Prometheus no pide credenciales
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      - usuarios-service
+      - cursos-service
+      - trivia-service
+
+  # los tres tableros (negocio, tecnico por instancia y seguridad) se cargan solos (ver observabilidad/grafana)
+  grafana:
+    image: grafana/grafana:13.2.5
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?falta GRAFANA_ADMIN_PASSWORD en el .env}
+      # para la demo: ver los tableros sin iniciar sesion, solo lectura (editar pide el admin). Solo se publica en
+      # esta maquina
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/negocio.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+    volumes:
+      - ./observabilidad/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observabilidad/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      - prometheus
+
 volumes:
   usuarios_data:
   cursos_data:
   trivia_data:
+  prometheus_data:
+  grafana_data:
