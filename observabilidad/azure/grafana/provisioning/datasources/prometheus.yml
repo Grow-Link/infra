@@ -1,0 +1,15 @@
+# La fuente de datos de los tableros en Azure: el Prometheus de Azure (otro contenedor). La direccion llega por la variable de
+# entorno PROMETHEUS_URL, que pone scripts/azure/desplegar-metricas.sh. El uid es el mismo que en el docker compose porque los
+# tableros lo citan, y asi son los MISMOS JSON en los dos sitios.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus-growlink
+    type: prometheus
+    access: proxy
+    url: ${PROMETHEUS_URL}
+    isDefault: true
+    editable: false
+    jsonData:
+      # el mismo intervalo del raspado (azure/prometheus.yml)
+      timeInterval: 10s

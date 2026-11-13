@@ -175,7 +175,7 @@ services:
       TRIVIA_URL: http://trivia-service:8085
       DNS_RESOLVER: 127.0.0.11
     ports:
-      - "3000:80"
+      - "3000:8080"
     depends_on:
       - usuarios-service
       - cursos-service
@@ -246,6 +246,7 @@ services:
     volumes:
       - ./observabilidad/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observabilidad/grafana/dashboards:/etc/grafana/dashboards:ro
+      - ./observabilidad/grafana/dashboards-docker:/etc/grafana/dashboards-docker:ro
       - grafana_data:/var/lib/grafana
     ports:
       - "127.0.0.1:3001:3000"

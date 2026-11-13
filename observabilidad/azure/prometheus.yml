@@ -1,0 +1,46 @@
+# Prometheus de AZURE (contenedor en Azure Container Instances, ver scripts/azure/desplegar-metricas.sh). Es el mismo
+# Prometheus del docker compose, pero en vez de descubrir las replicas por el DNS de Docker, raspa cada App Service por su
+# direccion: usuarios y cursos tienen una instancia, y trivia corre en TRES App Service distintos (copias A, B y C, en tres
+# servidores y dos regiones), asi que cada copia tiene su propia direccion y aparece por separado en los tableros.
+#
+# /actuator/prometheus solo contesta con el token del scrape en la cabecera X-Metricas-Token. El token no esta escrito aqui:
+# el arranque del contenedor lo escribe en /tmp/metricas-token desde la variable METRICAS_TOKEN.
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+# las alertas de instancia caida, lenta o con errores (escenario O1), las mismas del docker compose
+rule_files:
+  - /mnt/infra/observabilidad/prometheus/alertas.yml
+
+scrape_configs:
+  - job_name: usuarios-service
+    scheme: https
+    metrics_path: /actuator/prometheus
+    http_headers:
+      X-Metricas-Token:
+        files: [/tmp/metricas-token]
+    static_configs:
+      - targets: ['growlink-usuarios-argqeudgbegyenca.canadacentral-01.azurewebsites.net:443']
+
+  - job_name: cursos-service
+    scheme: https
+    metrics_path: /actuator/prometheus
+    http_headers:
+      X-Metricas-Token:
+        files: [/tmp/metricas-token]
+    static_configs:
+      - targets: ['growlink-cursos-bcezhghxdwbvbvdq.canadacentral-01.azurewebsites.net:443']
+
+  - job_name: trivia-service
+    scheme: https
+    metrics_path: /actuator/prometheus
+    http_headers:
+      X-Metricas-Token:
+        files: [/tmp/metricas-token]
+    static_configs:
+      # copia A (plan compartido, Canada Central), copia B (plan propio, Canada Central) y copia C (plan propio, East US 2)
+      - targets:
+          - growlink-trivia-ckgtdpbyhnfzdpbw.canadacentral-01.azurewebsites.net:443
+          - growlink-trivia-b.azurewebsites.net:443
+          - growlink-trivia-c.azurewebsites.net:443

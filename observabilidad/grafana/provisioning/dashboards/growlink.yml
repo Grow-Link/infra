@@ -11,3 +11,13 @@ providers:
     updateIntervalSeconds: 30
     options:
       path: /etc/grafana/dashboards
+  # el tablero de logs lee de Loki, que solo existe en el docker compose (en Azure los logs se consultan en Log Analytics):
+  # por eso vive aparte, para que el Grafana de Azure no lo cargue con una fuente de datos que no tiene
+  - name: growlink-docker
+    folder: GrowLink
+    type: file
+    disableDeletion: true
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards-docker

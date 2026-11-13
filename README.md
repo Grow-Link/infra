@@ -403,7 +403,7 @@ escalado y el balanceador incluidos.
    - `GROWLINK_JWT_SECRET`: el mismo en las tres.
    - `GROWLINK_INTERNAL_KEY`: la misma en usuarios y trivia.
    - `PORT` y `WEBSITES_PORT`: poner las dos con el puerto del servicio
-     (usuarios 8080, cursos 8086, trivia 8085, front solo `WEBSITES_PORT=80`).
+     (usuarios 8080, cursos 8086, trivia 8085, front solo `WEBSITES_PORT=8080`).
    - `CLAUDE_API_KEY` en cursos para el roadmap con IA.
    - `METRICAS_TOKEN`: el mismo en las tres (minimo 16 caracteres). Sin el, `/actuator/prometheus` queda cerrado
      (ver "Tableros").

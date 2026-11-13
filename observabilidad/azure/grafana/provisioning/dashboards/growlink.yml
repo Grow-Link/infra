@@ -1,0 +1,12 @@
+# Los tableros de GrowLink en Azure (negocio, tecnico por instancia y seguridad): los MISMOS JSON del docker compose, que el
+# contenedor lee del repo clonado en /mnt/infra. El de logs no va: lee de Loki, que solo existe en el docker compose.
+apiVersion: 1
+providers:
+  - name: growlink
+    folder: GrowLink
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 60
+    options:
+      path: /mnt/infra/observabilidad/grafana/dashboards
