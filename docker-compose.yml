@@ -195,6 +195,7 @@ services:
       METRICAS_TOKEN: ${METRICAS_TOKEN:?falta METRICAS_TOKEN en el .env}
     volumes:
       - ./observabilidad/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observabilidad/prometheus/alertas.yml:/etc/prometheus/alertas.yml:ro
       - prometheus_data:/prometheus
     ports:
       # solo desde esta maquina: la interfaz de Prometheus no pide credenciales
@@ -204,7 +205,32 @@ services:
       - cursos-service
       - trivia-service
 
-  # los tres tableros (negocio, tecnico por instancia y seguridad) se cargan solos (ver observabilidad/grafana)
+  # almacen de logs (escenario O2): Loki guarda los logs de TODOS los contenedores de GrowLink y Alloy los recoge. Cada
+  # servicio escribe una linea JSON por evento con el identificador de la peticion (X-Request-Id), asi que la
+  # busqueda por ese identificador, en el tablero "Logs" de Grafana, trae el recorrido completo entre servicios.
+  # Loki solo se publica en esta maquina (no pide credenciales). Ver ADR de observabilidad y el README, seccion "Logs".
+  loki:
+    image: grafana/loki:3.5.0
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./observabilidad/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    ports:
+      - "127.0.0.1:3100:3100"
+
+  # Alloy lee el socket de Docker (solo lectura) para descubrir los contenedores del compose y mandarle sus logs a Loki.
+  # Es lo mismo que haria Promtail, que ya esta descontinuado. Solo para la demo en esta maquina: darle el socket de
+  # Docker a un contenedor es mucho permiso, no se hace en un ambiente de verdad (alli los logs salen por la plataforma).
+  alloy:
+    image: grafana/alloy:v1.9.0
+    command: run /etc/alloy/config.alloy --storage.path=/var/lib/alloy/data
+    volumes:
+      - ./observabilidad/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+
+  # los tableros (negocio, tecnico por instancia, seguridad y logs) se cargan solos (ver observabilidad/grafana)
   grafana:
     image: grafana/grafana:13.2.5
     environment:
@@ -225,6 +251,7 @@ services:
       - "127.0.0.1:3001:3000"
     depends_on:
       - prometheus
+      - loki
 
 volumes:
   usuarios_data:
@@ -232,3 +259,4 @@ volumes:
   trivia_data:
   prometheus_data:
   grafana_data:
+  loki_data:

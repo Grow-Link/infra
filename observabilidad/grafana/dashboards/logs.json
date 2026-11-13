@@ -1,0 +1,223 @@
+{
+  "uid": "growlink-logs",
+  "title": "GrowLink - Logs",
+  "tags": [
+    "growlink",
+    "O2"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "10s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "servicio",
+        "label": "Servicio",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki-growlink"
+        },
+        "query": {
+          "query": "label_values(servicio)",
+          "refId": "servicio"
+        },
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*-service",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "sort": 1,
+        "regex": ".*-service",
+        "description": "Solo los servicios de GrowLink (no Loki, Grafana ni las bases de datos)"
+      },
+      {
+        "name": "solicitud",
+        "label": "Identificador de la peticion (X-Request-Id)",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Como usarlo",
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Cada peticion lleva un identificador (`X-Request-Id`) que viaja entre servicios y sale en **cada linea de log**. Pega ese identificador arriba, en *Identificador de la peticion*, y el panel **Recorrido de la peticion** muestra todo lo que paso, en el orden en que paso y en los tres servicios. El identificador sale en la cabecera de respuesta `X-Request-Id` (en el navegador: Herramientas de desarrollo > Red). Sin identificador se ven todos los logs."
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Eventos por nivel",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki-growlink"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki-growlink"
+          },
+          "expr": "sum by (nivel) (count_over_time({servicio=~\"$servicio\"} [$__interval]))",
+          "legendFormat": "{{nivel}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ERROR"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "WARN"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "INFO"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "type": "logs",
+      "title": "Recorrido de la peticion",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki-growlink"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki-growlink"
+          },
+          "expr": "{servicio=~\"$servicio\"} |= \"$solicitud\""
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Ascending",
+        "dedupStrategy": "none"
+      }
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "Avisos y errores",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki-growlink"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki-growlink"
+          },
+          "expr": "{servicio=~\"$servicio\", nivel=~\"WARN|ERROR\"}"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
+    }
+  ]
+}

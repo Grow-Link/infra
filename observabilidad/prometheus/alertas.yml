@@ -1,0 +1,44 @@
+# Alertas de GrowLink (escenario O1: detectar una instancia degradada sin leer logs). Prometheus las evalua cada 5 s
+# (evaluation_interval de prometheus.yml). Se ven en http://localhost:9090/alerts y en el tablero "Tecnico por
+# instancia" (panel "Alertas activas", que lee la serie ALERTS). No hay Alertmanager: la alerta "se dispara" cuando
+# aparece aqui y en el tablero, que es lo que se muestra en la demo; mandar un correo o un mensaje seria el siguiente
+# paso y esta fuera de este sprint.
+#
+# Para provocarlas en vivo:
+#   InstanciaCaida   -> docker pause <contenedor de una replica>   (y docker unpause para que se resuelva)
+#   InstanciaLenta   -> carga fuerte sobre una sola replica, o docker pause + unpause en bucle
+#   ErroresEnReplica -> apagar la base de datos de un servicio: docker compose stop db-cursos
+groups:
+  - name: growlink-instancias
+    rules:
+      # Una replica no contesta al raspado de Prometheus. "for" evita avisar por un solo raspado perdido.
+      - alert: InstanciaCaida
+        expr: up == 0
+        for: 15s
+        labels:
+          severidad: critica
+          escenario: O1
+        annotations:
+          resumen: "La replica {{ $labels.instance }} de {{ $labels.job }} no responde"
+
+      # El p95 de una replica pasa de 1 segundo. El reparto de nginx sigue mandandole trafico, por eso importa verla.
+      - alert: InstanciaLenta
+        expr: >-
+          histogram_quantile(0.95,
+            sum by (job, instancia, le) (rate(http_server_requests_seconds_bucket{uri!~"/actuator.*"}[30s]))) > 1
+        for: 30s
+        labels:
+          severidad: advertencia
+          escenario: O1
+        annotations:
+          resumen: "La replica {{ $labels.instancia }} de {{ $labels.job }} tarda mas de 1 s (p95)"
+
+      # Una replica esta devolviendo errores del servidor de forma sostenida.
+      - alert: ErroresEnReplica
+        expr: sum by (job, instancia) (rate(http_server_requests_seconds_count{status=~"5.."}[30s])) > 0.5
+        for: 30s
+        labels:
+          severidad: critica
+          escenario: O1
+        annotations:
+          resumen: "La replica {{ $labels.instancia }} de {{ $labels.job }} devuelve errores 5xx"

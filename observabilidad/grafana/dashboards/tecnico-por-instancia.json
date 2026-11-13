@@ -107,6 +107,130 @@
   },
   "panels": [
     {
+      "id": 101,
+      "type": "row",
+      "title": "Alertas (O1: instancia degradada)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 102,
+      "type": "stat",
+      "title": "Alertas activas",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-growlink"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-growlink"
+          },
+          "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 103,
+      "type": "table",
+      "title": "Que alerta esta disparada y en que replica",
+      "description": "Las reglas estan en observabilidad/prometheus/alertas.yml. Vacio = ninguna disparada.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-growlink"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 18,
+        "x": 6,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-growlink"
+          },
+          "expr": "ALERTS{alertstate=\"firing\"}",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "alertstate": true,
+              "Value": true,
+              "escenario": true
+            },
+            "indexByName": {
+              "alertname": 0,
+              "severidad": 1,
+              "job": 2,
+              "instancia": 3,
+              "instance": 4
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
       "type": "row",
       "title": "Estado",
       "collapsed": false,
@@ -115,7 +239,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 6
       },
       "panels": []
     },
@@ -132,7 +256,7 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 1
+        "y": 7
       },
       "targets": [
         {
@@ -196,7 +320,7 @@
         "h": 6,
         "w": 16,
         "x": 8,
-        "y": 1
+        "y": 7
       },
       "targets": [
         {
@@ -256,7 +380,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 7
+        "y": 13
       },
       "panels": []
     },
@@ -273,7 +397,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 8
+        "y": 14
       },
       "targets": [
         {
@@ -327,7 +451,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 8
+        "y": 14
       },
       "targets": [
         {
@@ -381,7 +505,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 16
+        "y": 22
       },
       "targets": [
         {
@@ -435,7 +559,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 22
       },
       "targets": [
         {
@@ -489,7 +613,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 30
       },
       "targets": [
         {
@@ -549,7 +673,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 31
+        "y": 37
       },
       "panels": []
     },
@@ -566,7 +690,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 32
+        "y": 38
       },
       "targets": [
         {
@@ -620,7 +744,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 32
+        "y": 38
       },
       "targets": [
         {
@@ -674,7 +798,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 40
+        "y": 46
       },
       "targets": [
         {
@@ -739,7 +863,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 40
+        "y": 46
       },
       "targets": [
         {
@@ -793,7 +917,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 48
+        "y": 54
       },
       "targets": [
         {

@@ -245,6 +245,7 @@ queda en http://localhost:9090. Los dos escuchan solo en esta maquina. La decisi
 | **Negocio** | Sesiones iniciadas (por modo), cursos completados (por area y por via: examen o admin), roadmaps por quien los armo (IA o respaldo), salas, partidas y jugadores de trivia, y quien esta conectado ahora |
 | **Tecnico por instancia** | Por servicio y por replica: si responden, peticiones por segundo, latencia p95 y media, errores 5xx, reparto del trafico, CPU, memoria, conexiones a la base en uso y esperando, hilos y WebSockets abiertos |
 | **Eventos de seguridad** | 401, 403 y 429 por servicio, por replica y por ruta, y los contadores propios de usuarios y cursos (ver ADR-0011) |
+| **Logs** | Los logs de todos los servicios y replicas en un solo lugar (Loki): eventos por nivel, busqueda por identificador de peticion y avisos y errores (ver "Logs" abajo) |
 
 Como llegan los datos:
 
@@ -263,6 +264,66 @@ Como llegan los datos:
 En **Azure** esto no funciona tal cual: desde afuera, la URL de un servicio cae en la instancia que elija el
 balanceador, asi que un Prometheus no puede raspar cada instancia. Esta anotado como pendiente en el ADR-0009 (que
 cada instancia empuje sus metricas a un Prometheus administrado, y los mismos tableros lo lean).
+
+### Alertas (escenario O1)
+
+`observabilidad/prometheus/alertas.yml` define tres alertas que Prometheus evalua cada 5 s: **InstanciaCaida** (una
+replica no contesta durante 15 s), **InstanciaLenta** (su p95 pasa de 1 s durante 30 s) y **ErroresEnReplica** (mas de
+0,5 errores 5xx por segundo durante 30 s). Se ven en http://localhost:9090/alerts y en el tablero *Tecnico por
+instancia*, arriba, en *Alertas activas*. No hay Alertmanager: la alerta "se dispara" cuando aparece en esos dos sitios;
+mandar un correo o un mensaje seria el siguiente paso.
+
+Para provocar una en vivo: `docker pause <contenedor de una replica de trivia>` (en 15-20 s aparece *InstanciaCaida* con
+el nombre de la replica) y `docker unpause <contenedor>` para que se resuelva. `docker ps --filter name=trivia` da los
+nombres.
+
+### Logs (escenario O2)
+
+Loki guarda los logs de **todos** los contenedores del compose y Alloy los recoge (`observabilidad/loki`,
+`observabilidad/alloy`). Cada servicio escribe una linea JSON por evento con el identificador de la peticion
+(`X-Request-Id`), que viaja de un servicio a otro. El tablero **Logs** de Grafana (http://localhost:3001) tiene un
+campo *Identificador de la peticion*: se pega el identificador (sale en la cabecera de respuesta `X-Request-Id`, en las
+herramientas de desarrollo del navegador) y el panel *Recorrido de la peticion* muestra todo lo que paso, en orden y en
+los tres servicios. Tambien se puede preguntar a Loki directo: `{servicio="trivia-service"} |= "<identificador>"` en
+*Explore*, con la fuente de datos *Loki*.
+
+Dos avisos honestos: (1) Alloy lee el socket de Docker para descubrir los contenedores, un permiso grande que solo se le
+da para esta demo en una maquina propia; en Azure los logs salen por la plataforma (*Log stream* y Log Analytics) y esto
+no se usa. (2) El identificador **no** es una etiqueta de Loki (habria una por peticion): se busca como texto dentro de la
+linea.
+
+## Autoescalado (escenario D3)
+
+`scripts/autoescalar.mjs` es una **regla de autoescalado** para trivia en el Docker: cada 5 s lee de Prometheus las
+conexiones por replica y, si pasan de 30 durante 20 s seguidos, sube una replica (hasta 4); si bajan de 10 durante 2
+minutos, quita una (hasta 1); despues de cada cambio espera 1 minuto. Es el mismo razonamiento que una regla de
+autoescalado de Azure (metrica, umbral, tiempo sostenido, enfriamiento), pero la ejecuta un script con
+`docker compose up --scale`, no Azure.
+
+```bash
+node scripts/autoescalar.mjs                       # con el compose levantado
+SOLO_MOSTRAR=1 node scripts/autoescalar.mjs        # muestra que decidiria sin cambiar nada
+```
+
+Para verlo: dejar el script corriendo, abrir el tablero *Tecnico por instancia* y lanzar la carga de trivia
+(`scripts/carga`, 10 a 100 jugadores): las conexiones por replica suben, el script sube replicas y en el tablero aparece
+cada replica nueva recibiendo trafico. Todos los umbrales se cambian con variables (ver el encabezado del script).
+
+**Lo que vimos al probarlo (13 de noviembre, Docker Desktop en Windows, 60 jugadores en 6 salas, 4 etapas seguidas).** La
+regla subio de 1 a 2 replicas a los 10 s de empezar la carga y bajo a 1 cuando ya no quedaba nadie, sin cortar partidas.
+Una primera version bajaba cuando el *promedio* era bajo y corto la mitad de las salas de una etapa; ahora mira la
+replica mas ocupada. Aun asi, **una de las cuatro etapas perdio 3 de 6 salas** ("el WebSocket se cerro a media partida",
+30 jugadores sin resultado) con la regla sin tocar nada. Los logs (tablero *Logs*) muestran que la conexion de
+trivia-service con RabbitMQ se cae y vuelve cada pocos minutos (`BrokerAvailabilityEvent available=false`, "No messages
+received in 30000 ms"), tambien sin carga. RabbitMQ no registra nada en esos momentos, y la configuracion del relay en
+`WebSocketConfig` es la de Spring por defecto (latidos cada 10 s). No lo sabemos explicar todavia: puede ser Docker Desktop
+en esta maquina o puede ser real. **Antes de dar numeros de la prueba P1 con varias replicas hay que repetirla en otra
+maquina**, y si pasa tambien alli, mirar los latidos del relay (`setSystemHeartbeatSendInterval` y
+`setSystemHeartbeatReceiveInterval`).
+
+**Por que no es el autoescalado de Azure:** el plan de App Service que usamos (B2) no permite reglas de autoescalado
+(eso empieza en el plan Standard), y trivia en Azure tampoco puede correr con mas de una instancia mientras no tenga un
+RabbitMQ al que conectarse (en Docker si lo tiene). Esta decision y sus alternativas estan en el documento de arquitectura.
 
 ## Pruebas de carga
 
