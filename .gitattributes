@@ -1,2 +1,4 @@
 *.sh text eol=lf
 rabbitmq/* text eol=lf
+# la configuracion de Prometheus, Loki, Alloy y Grafana se monta dentro de contenedores Linux
+observabilidad/** text eol=lf
