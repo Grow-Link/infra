@@ -28,6 +28,27 @@ else
   echo "IA: SIN LLAVE (CLAUDE_API_KEY vacia, el roadmap sale en modo de respaldo sin IA)"
 fi
 
+# cifrado entre el front y los servicios (S3): todas las replicas tienen que usar la MISMA llave privada, si no una
+# peticion cifrada para una replica no la entiende otra. Si el .env no la trae, se crea una y se guarda ahi.
+if [[ -z "${GROWLINK_CIFRADO_CLAVE_PRIVADA:-}" ]]; then
+  LLAVE_NUEVA=""
+  # openssl puede estar y aun asi fallar (p. ej. el de Git Bash en Windows sin su configuracion): con "set -e" eso
+  # tumbaria el script, por eso cada intento tolera el fallo y el siguiente solo corre si el anterior no dio nada
+  if command -v openssl >/dev/null 2>&1; then
+    LLAVE_NUEVA=$(openssl genpkey -algorithm RSA -pkeyopt rsa_key_bits:2048 2>/dev/null | openssl pkcs8 -topk8 -nocrypt -outform DER 2>/dev/null | base64 | tr -d '\n' || true)
+  fi
+  if [[ -z "$LLAVE_NUEVA" ]] && command -v node >/dev/null 2>&1; then
+    LLAVE_NUEVA=$(node -e "const c=require('crypto');process.stdout.write(c.generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs8',format:'der'},publicKeyEncoding:{type:'spki',format:'der'}}).privateKey.toString('base64'))" || true)
+  fi
+  if [[ -n "$LLAVE_NUEVA" ]]; then
+    printf '\nGROWLINK_CIFRADO_CLAVE_PRIVADA=%s\n' "$LLAVE_NUEVA" >> .env
+    export GROWLINK_CIFRADO_CLAVE_PRIVADA="$LLAVE_NUEVA"
+    echo "Cifrado: se creo la llave compartida de las replicas y se guardo en .env"
+  else
+    echo "Cifrado: no se pudo crear la llave (hace falta openssl o node), cada replica usaria una distinta" >&2
+  fi
+fi
+
 URL="${URL:-http://localhost:3000}"
 USUARIOS="${USUARIOS_REPLICAS:-2}"
 CURSOS="${CURSOS_REPLICAS:-2}"

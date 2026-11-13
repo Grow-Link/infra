@@ -148,6 +148,14 @@ demas. No es capricho: cada servicio, al arrancar sobre una base vacia, mete sus
 datos de prueba si todavia no hay nada, y si varias replicas arrancan al mismo
 tiempo todas ven la base vacia y los datos se duplican.
 
+**Cifrado entre el front y los servicios (S3).** El front cifra el cuerpo de cada peticion y los servicios lo
+descifran, y lo mismo con las respuestas, encima de HTTPS. Para eso todas las replicas de los tres servicios tienen
+que usar la **misma llave privada** (`GROWLINK_CIFRADO_CLAVE_PRIVADA` en el `.env`): con una llave distinta por
+replica, una peticion cifrada para una replica no la entenderia otra. No hay que hacer nada: si el `.env` no la
+trae, `levantar.sh` crea una y la guarda ahi. Para comprobarlo, la llave publica tiene que ser la misma pase por la
+replica que pase: `curl http://localhost:3000/api-trivia/api/seguridad/clave-publica` (varias veces, el campo
+`clave` no cambia).
+
 Para construir una version distinta, cambiar de rama en todos los repos a la vez:
 
 ```bash

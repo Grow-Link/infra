@@ -85,6 +85,8 @@ services:
       SPRING_DATASOURCE_USERNAME: growlink
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-growlink}
       GROWLINK_JWT_SECRET: ${GROWLINK_JWT_SECRET:?falta GROWLINK_JWT_SECRET en el .env}
+      # cifrado entre el front y los servicios: la misma llave privada en todas las replicas (la crea levantar.sh si falta)
+      GROWLINK_CIFRADO_CLAVE_PRIVADA: ${GROWLINK_CIFRADO_CLAVE_PRIVADA:-}
       GROWLINK_INTERNAL_KEY: ${GROWLINK_INTERNAL_KEY:?falta GROWLINK_INTERNAL_KEY en el .env}
       GROWLINK_CURSOS_SERVICE_URL: http://cursos-service:8086
       # el token con el que Prometheus lee /actuator/prometheus (el mismo en los tres servicios)
@@ -112,6 +114,8 @@ services:
       SPRING_DATASOURCE_USERNAME: growlink
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-growlink}
       GROWLINK_JWT_SECRET: ${GROWLINK_JWT_SECRET:?falta GROWLINK_JWT_SECRET en el .env}
+      # cifrado entre el front y los servicios: la misma llave privada en todas las replicas (la crea levantar.sh si falta)
+      GROWLINK_CIFRADO_CLAVE_PRIVADA: ${GROWLINK_CIFRADO_CLAVE_PRIVADA:-}
       CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
       METRICAS_TOKEN: ${METRICAS_TOKEN:?falta METRICAS_TOKEN en el .env}
       LIMITE_IP_MAXIMO_POR_MINUTO: ${LIMITE_IP_MAXIMO_POR_MINUTO:-300}
@@ -135,6 +139,8 @@ services:
       SPRING_DATASOURCE_USERNAME: growlink
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-growlink}
       GROWLINK_JWT_SECRET: ${GROWLINK_JWT_SECRET:?falta GROWLINK_JWT_SECRET en el .env}
+      # cifrado entre el front y los servicios: la misma llave privada en todas las replicas (la crea levantar.sh si falta)
+      GROWLINK_CIFRADO_CLAVE_PRIVADA: ${GROWLINK_CIFRADO_CLAVE_PRIVADA:-}
       GROWLINK_INTERNAL_KEY: ${GROWLINK_INTERNAL_KEY:?falta GROWLINK_INTERNAL_KEY en el .env}
       USUARIOS_BASE_URL: http://usuarios-service:8080
       CURSOS_BASE_URL: http://cursos-service:8086
