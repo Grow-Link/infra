@@ -26,7 +26,7 @@ estudiante, Front Door prohibido): [ADR-0010](adr/0010-despliegue-con-balanceado
 | Pide el enunciado | Cómo lo cubrimos | Estado |
 |---|---|---|
 | Disponibilidad: escalar el backend, **balanceador explícito**, componentes distribuidos, prototipo funcional, ≥ 1 escenario | D1 y D3 con el nginx balanceando 3 copias de trivia | Comprobado |
-| Seguridad: 3 escenarios aprobados e implementados | S1 identidad (Microsoft), S2 roles, S3 cifrado, S4 límite por IP | S1, S2, S3 comprobados; **S4 con un fallo abierto (sección 5)** |
+| Seguridad: 3 escenarios aprobados e implementados | S1 identidad (Microsoft), S2 roles, S3 cifrado, S4 límite por IP | S1, S3 y S4 comprobados; S2 por ensayar con una cuenta no administradora |
 | Mantenibilidad: Sonar en el CI | Los 4 repos; ver sección 4 para el bono | **Por cerrar** |
 | Rendimiento: 1 escenario aprobado + prueba técnica | P1, script de carga | **Falta medir en Azure** (`scripts/azure/medir-p1.sh`) |
 | Observabilidad: ≥ 1 escenario y **dos tableros** (negocio y técnico) | O1 alertas, O2 logs; tableros en Grafana de Azure | Comprobado |
@@ -67,14 +67,17 @@ métricas; un PUBLICADOR sí publica; un ADMIN ve Métricas. Para el 403: con un
 (no se lee), la respuesta lleva `X-GL-Cifrado: 1` y tampoco se lee. Además cabecera `Strict-Transport-Security` (HSTS). Calificación del certificado: https://www.ssllabs.com/ssltest/analyze.html?d=growlink-front.azurewebsites.net
 *Límites que hay que decir:* el WebSocket de trivia va por `wss` sin este cifrado extra, y las llamadas entre servicios no lo llevan ([ADR-0008](adr/0008-cifrado-de-la-informacion-entre-el-front-y-los-servicios.md)).
 
-**S4. Resistir una ráfaga desde una misma IP.** *Parcial: ver sección 5.* Método que funciona hoy (una sola conexión, 400 peticiones):
-`curl -s -o /dev/null -w '%{http_code}\n' "https://growlink-usuarios-argqeudgbegyenca.canadacentral-01.azurewebsites.net/api/auth/usuarios?n=[1-400]" | sort | uniq -c`
-→ **300 respuestas 200 y 100 respuestas 429**. Luego, en Grafana, el tablero «Eventos de seguridad» muestra los 429.
+**S4. Resistir una ráfaga desde una misma IP.** *Comprobado el 14 de noviembre en Azure, después de la corrección de Mariana (el filtro cuenta por la IP del socket, sin puerto, e ignora la cabecera `X-Forwarded-For` que escribe el cliente).*
+Ráfaga por muchas conexiones a la vez (el caso de un atacante de verdad):
+`seq 600 | xargs -P 20 -I{} curl -4 -s -o /dev/null -w '%{http_code}\n' https://growlink-usuarios-argqeudgbegyenca.canadacentral-01.azurewebsites.net/api/auth/usuarios | sort | uniq -c`
+→ aparecen respuestas **429** (el tope es de 300 por minuto, por IP). Con una cabecera inventada distinta en cada petición **tampoco se salta el tope**: en la prueba, 300 respuestas 200 y 90 respuestas 429. En Grafana, el tablero «Eventos de seguridad» muestra los 429.
+Para ver el mensaje de un 429 basta repetir un `curl -i` justo después de la ráfaga (dura hasta que termina la ventana de 60 s).
 
-**O2. Rastrear un evento por su identificador.** *Por ensayar el primer día* (los logs llegan con unos minutos de retraso). Hacer una acción en la app, copiar la cabecera de respuesta `X-Request-Id` (Red del
-navegador; nginx ignora el que mande el cliente y pone el suyo) y, en el portal, `workspace-rggrowlinkkH1i` > Logs:
-`AppServiceConsoleLogs | where ResultDescription has "<identificador>" | project TimeGenerated, App=tostring(split(_ResourceId,'/')[8]), ResultDescription | order by TimeGenerated asc`.
-En Docker local hay un tablero «Logs» de Grafana que hace lo mismo ([ADR-0015](adr/0015-logs-y-alertas-en-docker-y-en-azure.md)).
+**O2. Rastrear un evento por su identificador.** *Comprobado el 14 de noviembre: un evento aparece en Log Analytics a los 2 minutos.* Generar un evento y copiar su identificador:
+`curl -i -H "Authorization: Bearer falso" https://growlink-usuarios-argqeudgbegyenca.canadacentral-01.azurewebsites.net/api/usuarios/me` → la respuesta trae la cabecera `X-Request-ID` y el servicio deja un aviso «Token rechazado» con ese identificador.
+Luego, en el portal de Azure: `workspace-rggrowlinkkH1i` > Logs, esperar 2 a 5 minutos y ejecutar (con el rango de tiempo en «Última hora»):
+`AppServiceConsoleLogs | where ResultDescription has "<identificador>" | project TimeGenerated, App=tostring(split(_ResourceId,'/')[8]), ResultDescription | order by TimeGenerated asc`
+Si la petición pasa por el front (nginx) hay que usar el identificador de la cabecera de respuesta, no uno propio: nginx ignora el que mande el cliente. En Docker local hay un tablero «Logs» de Grafana que hace lo mismo ([ADR-0015](adr/0015-logs-y-alertas-en-docker-y-en-azure.md)).
 
 **M1. Inspección continua.** Mostrar el panel de SonarCloud, la pestaña *Actions* (CI en verde: pruebas y análisis) y `node scripts/estado-calidad.mjs`. Para mostrar el **pipeline que se detiene**: en un repo,
 crear una rama con una prueba que falle y abrir un pull request: el CI se pone en rojo y el despliegue no corre (solo corre tras un push a `main` con CI en verde). Para que también frene la puerta de calidad
@@ -87,18 +90,15 @@ mirar el tablero de negocio («roadmaps por origen») y **quitar la llave despu�
 ## 4. Para el bono (0,5 puntos): notas A, 80 % en el backend y 40 % en el front
 
 Estado el 14 de noviembre (`node scripts/estado-calidad.mjs` lo muestra al momento):
-- **usuarios:** puerta OK, cobertura 89 %, **solo falta marcar el CSRF** (abajo).
+- **usuarios:** puerta OK, cobertura 89 %. El CSRF ya no queda pendiente: se justificó en el código (ver abajo).
 - **cursos, trivia y front:** SonarCloud todavía muestra el primer análisis automático. Hay que **volver a correr su CI** (*Actions* > CI > *Re-run all jobs*) con el secreto bien escrito
   (`SONAR_TOKEN`, una sola N, en *Repository secrets*) y apagado *Automatic Analysis*. Cobertura esperada: front 76 % (mínimo 40 %), backends 87 a 96 % (mínimo 80 %).
-- **Falta marcar, en SonarCloud, dos alertas de CSRF como «Safe»** (usuarios `SecurityConfig:34` y cursos `SecurityConfig:77`), con este motivo: *la API autentica con un token en la cabecera
-  y la sesión es STATELESS, no usa cookies, así que CSRF no aplica*. Lo decide y lo hace el equipo desde un usuario con permiso en SonarCloud. La nota «A» exige cero vulnerabilidades, incluso menores.
+- **CSRF (usuarios `SecurityConfig:34` y cursos `SecurityConfig:77`):** resuelto el 14 de noviembre con una justificación escrita en el propio código (`NOSONAR java:S4502` más un comentario: *la API autentica con un token en la cabecera y no guarda sesión, no usa cookies, así que CSRF no aplica*), con autorización de Paula. Si se prefiere, además se puede marcar «Safe» en SonarCloud con ese mismo motivo.
 - Después de arreglar o marcar, **volver a correr CI otra vez** y comprobar con el script. Lo que sea falso positivo está explicado en [`sonarcloud-hallazgos.md`](sonarcloud-hallazgos.md).
 
 ## 5. Hallazgos abiertos (no esconderlos, se pueden decir en la presentación)
 
-1. **El límite por IP no aguanta varias conexiones en Azure.** El registro del filtro muestra que cuenta la IP **con el puerto** (`181.61.204.192:3208`): cada conexión nueva empieza de cero, y el tope de 300 por minuto
-   solo frena si todas las peticiones van por una misma conexión. El código del repo ya quita el puerto (`sinPuerto` en `LimitePorIpFilter`), así que hay que averiguar por qué el despliegue no lo aplica (qué forma
-   trae `X-Forwarded-For` en Azure, o qué jar está desplegado) y corregirlo en usuarios y cursos. Además el filtro toma el **primer** valor de `X-Forwarded-For`, que un cliente puede inventar. *Sugerido: Mariana, que escribió el filtro.*
+1. **Resuelto el 14 de noviembre: el límite por IP.** Mariana descubrió y corrigió que, en Azure, Tomcat copia la IP del cliente al socket **con su puerto** y deja una cabecera que el cliente podía inventar; el filtro ahora cuenta por el socket sin puerto. Comprobado en Azure con ráfagas por muchas conexiones y con cabeceras inventadas (sección 3, S4).
 2. **Pausas ocasionales de 14 a 15 s** en la copia A y en las de otros planes (el plan compartido llegó al 76–89 % de memoria y 98 % de CPU). Se acotó el heap de las JVM; puede afectar P1. Se mide y se dice tal cual.
 3. **En Docker, la conexión de trivia con RabbitMQ se cae y vuelve cada pocos minutos** y una de cuatro etapas perdió 3 de 6 salas ([README de infra](../README.md), sección «Autoescalado»). No se ha mirado en Azure: revisar con
    `AppServiceConsoleLogs | where ResultDescription has "BrokerAvailabilityEvent"`.
