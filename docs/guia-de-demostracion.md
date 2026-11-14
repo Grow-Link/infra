@@ -17,7 +17,7 @@ probó en Azure ese día; lo marcado «por ensayar» no se ha probado de punta a
 | Aplicación de Microsoft (Entra) | client ID `17fd558f-ea2b-4177-8142-48548dc5431c`; el portal de Entra da error 401 por la universidad: usar `az ad app show --id 17fd558f-ea2b-4177-8142-48548dc5431c` |
 
 **Cómo está armado en Azure** (grupo `rg-growlink`, Canada Central salvo lo indicado): front con nginx (el balanceador) · usuarios y cursos · **trivia en 3
-copias**, cada una en su propio servidor (`growlink-trivia` en el plan compartido, `growlink-trivia-b` en su plan, `growlink-trivia-c` en East US 2) · RabbitMQ,
+copias**, cada una en su propio servidor y plan B2 (`growlink-trivia` en el plan compartido, `growlink-trivia-d` en su plan B2 de East US, `growlink-trivia-c` en su plan B2 de East US 2) · RabbitMQ,
 Prometheus y Grafana en contenedores de Azure · PostgreSQL administrado. La decisión y por qué no hay autoescalado de Azure (cuota 0 en la suscripción de
 estudiante, Front Door prohibido): [ADR-0010](adr/0010-despliegue-con-balanceador-nginx-y-copias-de-trivia.md).
 
@@ -42,10 +42,10 @@ Antes de empezar: `curl -s https://growlink-front.azurewebsites.net/api-trivia/a
 1. Abrir el tablero técnico. En «Réplicas que responden» trivia marca 3.
 2. En otra terminal, tráfico constante por el balanceador:
    `for i in $(seq 1 200); do curl -s -o /dev/null -w '%{http_code}\n' https://growlink-front.azurewebsites.net/api-trivia/actuator/health; done | sort | uniq -c`
-3. Mientras corre: `az webapp stop -g rg-growlink -n growlink-trivia-b`
+3. Mientras corre: `az webapp stop -g rg-growlink -n growlink-trivia-d`
 4. Se espera: casi todo 200 (en la prueba, 89 de 90 con la copia apagada; el WebSocket negoció 12 de 12); el tablero baja a 2 y a los ~30 s aparece la alerta **InstanciaCaida**
    con el nombre de la copia (también en Prometheus `/alerts`).
-5. Volver a encender: `az webapp start -g rg-growlink -n growlink-trivia-b`. La copia tarda unos minutos en calentarse y puede dar errores al principio.
+5. Volver a encender: `az webapp start -g rg-growlink -n growlink-trivia-d`. La copia tarda unos minutos en calentarse y puede dar errores al principio.
 
 **D3. Sube la carga y se suma capacidad.** *Sin autoescalado de Azure: se dice así.* Es la medición de P1 con 1 copia y con 3. Para mostrar la regla de escalado (metrica, umbral,
 tiempo sostenido) hay un script que lo hace en el Docker local: `node scripts/autoescalar.mjs` (README de `infra`, sección «Autoescalado»).
@@ -109,7 +109,7 @@ Estado el 14 de noviembre (`node scripts/estado-calidad.mjs` lo muestra al momen
 ## 6. El documento de arquitectura (entregable final, impreso)
 
 Está en Docs («GrowLink: documento de arquitectura (Sprint 2)») y **no refleja el estado final**. Cambios que faltan:
-- **3.1 D1 y D3:** el balanceador es el nginx del front con 3 copias de trivia en 3 servidores y 2 regiones; sin autoescalado de Azure; cuotas de la suscripción de estudiante.
+- **3.1 D1 y D3:** el balanceador es el nginx del front con 3 copias de trivia en 3 servidores y 3 regiones; sin autoescalado de Azure; cuotas de la suscripción de estudiante.
 - **3.2 S3** (ya implementado, con sus límites), **S4** (con el hallazgo 1), **3.3 M1** (CI con Sonar, el despliegue espera al CI, el bono), **3.4 P1** (mediciones de `medir-p1.sh`), **3.5 O1 y O2** (alertas y logs en Azure).
 - **4 Arquitectura propuesta:** la Opción A (App Service con Front Door) **no es posible** (Front Door está prohibido en cuentas de estudiante): la decisión final es la de [ADR-0010](adr/0010-despliegue-con-balanceador-nginx-y-copias-de-trivia.md).
 - **5 ADR:** renumerar como en `infra/docs/adr` (0007 identidad, 0008 cifrado, 0009 métricas, 0010 despliegue, 0011 tope por IP, 0012 cortacircuito, 0013 carga, 0014 Sonar, 0015 logs).
@@ -133,7 +133,7 @@ Está en Docs («GrowLink: documento de arquitectura (Sprint 2)») y **no reflej
 az container delete -g rg-growlink -n growlink-grafana --yes
 az container delete -g rg-growlink -n growlink-prometheus --yes
 az container delete -g rg-growlink -n growlink-rabbitmq --yes      # trivia solo funciona con varias copias mientras exista
-az webapp delete -g rg-growlink -n growlink-trivia-b && az appservice plan delete -g rg-growlink -n plan-trivia-b --yes
+az webapp delete -g rg-growlink -n growlink-trivia-d && az appservice plan delete -g rg-growlink -n plan-trivia-d --yes
 az webapp delete -g rg-growlink -n growlink-trivia-c && az appservice plan delete -g rg-growlink -n plan-trivia-c --yes
 ```
 Si se borran las copias B y C, quitar `TRIVIA_URL_2` y `TRIVIA_URL_3` del front (o ponerlas iguales a `TRIVIA_URL`) y `TRIVIA_BROKER_RELAY_ENABLED` de la copia A.

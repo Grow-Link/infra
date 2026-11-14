@@ -28,7 +28,7 @@ RG="${RG:-rg-growlink}"
 REGION="${REGION:-canadacentral}"
 REPO="${REPO:-https://github.com/Grow-Link/infra}"
 RAMA="${RAMA:-main}"
-APPS=(growlink-usuarios growlink-cursos growlink-trivia growlink-trivia-b growlink-trivia-c)
+APPS=(growlink-usuarios growlink-cursos growlink-trivia growlink-trivia-d growlink-trivia-c)
 PROM_ETIQUETA="${PROM_ETIQUETA:-growlink-prometheus-ca}"
 GRAFANA_ETIQUETA="${GRAFANA_ETIQUETA:-growlink-grafana-ca}"
 

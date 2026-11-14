@@ -15,7 +15,7 @@ cd "$(dirname "$0")/../../.."          # la carpeta que contiene a infra y a los
 RG="${RG:-rg-growlink}"
 
 declare -A REPO=( [usuarios]=usuarios-service [cursos]=cursos-service [trivia]=trivia-service )
-declare -A APPS=( [usuarios]="growlink-usuarios" [cursos]="growlink-cursos" [trivia]="growlink-trivia growlink-trivia-b growlink-trivia-c" )
+declare -A APPS=( [usuarios]="growlink-usuarios" [cursos]="growlink-cursos" [trivia]="growlink-trivia growlink-trivia-d growlink-trivia-c" )
 QUE=("$@"); [[ ${#QUE[@]} -eq 0 ]] && QUE=(usuarios cursos trivia)
 
 for servicio in "${QUE[@]}"; do

@@ -22,7 +22,7 @@ export MSYS_NO_PATHCONV=1
 cd "$(dirname "$0")/../.."                       # infra
 RG="${RG:-rg-growlink}"
 FRONT_APP="${FRONT_APP:-growlink-front}"
-TRIVIA_APPS=(growlink-trivia growlink-trivia-b growlink-trivia-c)
+TRIVIA_APPS=(growlink-trivia growlink-trivia-d growlink-trivia-c)
 FRONT_HOST="$(az webapp show -g "$RG" -n "$FRONT_APP" --query defaultHostName -o tsv)"
 FRONT="https://$FRONT_HOST"
 FECHA="$(date +%Y-%m-%dT%H-%M-%S)"
