@@ -8,6 +8,11 @@ Las decisiones de fondo están en [`adr/`](adr/). La parte del roadmap está exp
 [`arquitectura-roadmap-catalogo-publicador.md`](arquitectura-roadmap-catalogo-publicador.md).
 
 > Este documento se va ampliando: la columna "Estado" dice qué ya está construido y qué es una propuesta.
+>
+> **Puesto al día el 16 de noviembre de 2026.** La numeración oficial de los escenarios de la entrega (D1, D2 y D3 de disponibilidad; S1 a S4 de
+> seguridad; M1; P1; O1 y O2) y lo que se midió en Azure están en el documento de arquitectura (Docs) y en
+> [`guia-de-demostracion.md`](guia-de-demostracion.md). Este archivo guarda el detalle técnico de cada prueba con su numeración anterior (A, E, S, R y O),
+> que no coincide con la de la entrega.
 
 ---
 
@@ -17,9 +22,9 @@ Las decisiones de fondo están en [`adr/`](adr/). La parte del roadmap está exp
 |---|---|---|---|
 | **Disponibilidad** | Una réplica caída no tumba el servicio; si la IA o un servicio vecino falla, el resto sigue | Redundancia + reintento en otra réplica · degradación (respaldo de la IA) · plazos máximos · sondas de salud | Construido |
 | **Escalabilidad** | Se agregan réplicas sin cambiar código | Servicios sin estado (JWT) · candados en la base y no en memoria · broker compartido (RabbitMQ) | Construido |
-| **Seguridad** | Nadie actúa a nombre de otro; la IA no manda; el abuso tiene tope | Autenticación firmada (JWT) · autorización por dueño · validar todo lo que viene de la IA · límite de uso | Construido (falta rol al publicar) |
-| **Rendimiento y costo** | Misma pregunta, misma respuesta, una sola llamada a la IA; tiempos medidos con carga | Caché de propuestas por hash · candado por clave · plazos máximos · pruebas de carga con metas (ADR-0013) | Construido (metas por confirmar en Azure) |
-| **Observabilidad** | Se puede saber qué réplica atendió, seguir una petición entre servicios, consultar la salud y ver en tableros cómo está cada réplica, el negocio y los rechazos de seguridad | `X-Instancia` · `X-Request-Id` en logs JSON · `/actuator/health` · métricas con etiqueta `instancia` en Prometheus y tres tableros en Grafana (ADR-0009) | Construido en local (en Azure falta cómo llegan las métricas) |
+| **Seguridad** | Nadie actúa a nombre de otro; la IA no manda; el abuso tiene tope | Autenticación firmada (JWT) · autorización por dueño · validar todo lo que viene de la IA · límite de uso | Construido (el rol al publicar ya se exige: un USUARIO recibe 403 al crear un curso) |
+| **Rendimiento y costo** | Misma pregunta, misma respuesta, una sola llamada a la IA; tiempos medidos con carga | Caché de propuestas por hash · candado por clave · plazos máximos · pruebas de carga con metas (ADR-0013) | Medido en Azure el 16 de noviembre; la meta de trivia se ajustó de 300 ms a 2 s (ADR-0013) |
+| **Observabilidad** | Se puede saber qué réplica atendió, seguir una petición entre servicios, consultar la salud y ver en tableros cómo está cada réplica, el negocio y los rechazos de seguridad | `X-Instancia` · `X-Request-Id` en logs JSON · `/actuator/health` · métricas con etiqueta `instancia` en Prometheus y tres tableros en Grafana (ADR-0009) | Construido en local y en Azure (Prometheus y Grafana en Container Instances, logs en Log Analytics; ADR-0009 y ADR-0015) |
 | **Modificabilidad** | Cambiar de IA o agregar un área no toca el servicio | Estrategia (`RoadmapAiClient`) · capas · catálogo derivado de la base | Construido |
 | **Testabilidad** | Todo lo importante se prueba sin internet ni gastar IA | IA falsa · reloj inyectable · servidor de mentira · bases en memoria | Construido |
 | **Usabilidad** | Pantallas con lo esencial, mensajes que dicen qué hacer | Divulgación progresiva · errores en lenguaje de la persona | Construido |
@@ -129,12 +134,15 @@ jugadores, con p50, p95 y p99 por etapa).
 
 ## 4. Lo que sigue (propuestas, en orden de valor)
 
+Lo que estaba en esta lista el 12 de noviembre y ya se hizo: el rol PUBLICADOR o ADMIN al publicar, la salud y el identificador de petición en
+trivia-service, las métricas en Azure, el cortacircuito de la IA y las pruebas de carga en Azure con 1 y con 3 copias. Lo que queda:
+
 | Atributo | Propuesta | Por qué ahora o después |
 |---|---|---|
-| Seguridad | Exigir rol PUBLICADOR/ADMIN al publicar (S7) | Cierra el único hueco de autorización conocido; toca tests de varios archivos |
-| Observabilidad | Lo mismo de `X-Request-Id`, salud (y su healthcheck) en trivia-service | Hoy solo cursos y usuarios; trivia tiene trabajo en curso del equipo |
-| Observabilidad | Que las métricas lleguen a un tablero también en Azure (cada instancia empujándolas a un Prometheus administrado, ADR-0009) y una métrica de cuántas veces el Home degradó por un cursos-service lento | En local ya hay tablero; en Azure, desde afuera no se puede raspar cada instancia |
-| Disponibilidad | Cortacircuitos para la IA (tras N fallos seguidos, ir directo al respaldo un rato) | Hoy cada petición espera el plazo completo si Claude está caído |
-| Rendimiento | Correr las pruebas de carga en Azure con 1 y 3 instancias y confirmar (o ajustar) las metas iniciales del ADR-0013 | Los scripts ya existen; falta el ambiente |
-| Seguridad | Límite también por IP en el login | El login no tiene contraseña (es de demostración) |
+| Disponibilidad | Sondas de salud en el balanceador y más de una instancia de usuarios y cursos | La suscripción de estudiante permite una instancia por plan y región, y el nginx de código abierto no revisa la salud (ADR-0010) |
+| Observabilidad | Avisos por correo cuando salta una alerta (Alertmanager) | Hoy la alerta se ve en Prometheus y en el tablero, pero no avisa a nadie |
+| Seguridad | Red privada y TLS para RabbitMQ (el puerto 61613 está abierto a internet) y HTTPS para Prometheus y Grafana | Container Instances les da dirección pública y sin certificado (ADR-0010 y ADR-0015) |
+| Rendimiento | Entender por qué el p95 de trivia (cerca de 1,3 s) no baja con más copias: copias en la región de la base de datos y prueba corrida desde Azure | Son hipótesis sin comprobar (ADR-0013) |
+| Seguridad | Comprobar cómo se reparte el tope por IP entre varias personas que entran por el nginx del front | Puede que cuenten como una sola IP (ADR-0011) |
 | Usabilidad | Revisión de accesibilidad (contraste, teclado, lector de pantalla) | Ya hay etiquetas, falta medirlo |
+

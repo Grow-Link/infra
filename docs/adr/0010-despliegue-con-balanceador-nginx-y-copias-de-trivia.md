@@ -31,7 +31,9 @@ posible, y se comprobó con los mensajes de Azure, no por suposición:
   reparto (`az webapp start/stop`, o la regla de `scripts/autoescalar.mjs` en el Docker de la demo).
 
 **Consecuencias.**
-- (+) Apagar una copia no corta el servicio: se mide en D1. El reparto y la caída se ven en el tablero técnico, por copia.
+- (+) Apagar una copia no corta el servicio: se mide en D1. El reparto y la caída se ven en el tablero técnico, por copia. Comprobado el
+  16 de noviembre con 12 jugadores simulados (`scripts/azure/probar-falla-de-copia.sh`): al apagar `growlink-trivia-d` en plena partida, los 4
+  jugadores de esa copia volvieron solos en 3,7 a 4,0 s, nadie salió de su sala y las 3 partidas terminaron.
 - (+) Cumple el enunciado: balanceador explícito, backend escalable, componentes distribuidos y prototipo funcional.
 - (−) **nginx de código abierto no revisa la salud de cada copia**: manda tráfico a una caída hasta que falla la petición, y
   cada intento fallido tarda hasta 2 s. Las partidas de una copia que cae se cortan y se reconectan.
@@ -39,3 +41,6 @@ posible, y se comprobó con los mensajes de Azure, no por suposición:
 - (−) Más de una copia en un plan compartido (A) compite por memoria con usuarios y cursos; por eso se acotó el heap de las
   JVM de ese plan.
 - (−) Cada copia hay que desplegarla y configurarla aparte (`scripts/azure/desplegar-backends.sh` lo hace en bloque).
+- (−) usuarios y cursos tienen una sola instancia (una por plan y región): si se caen, no hay otra que los reemplace. D1 se comprueba con trivia.
+- (−) **El puerto 61613 de RabbitMQ (STOMP) está abierto a internet y sin TLS**, porque Container Instances le da una dirección pública. El contenedor
+  pide usuario y clave y solo lleva los mensajes de las salas de trivia. Es un riesgo conocido en este sprint; la mejora sería una red privada con TLS.

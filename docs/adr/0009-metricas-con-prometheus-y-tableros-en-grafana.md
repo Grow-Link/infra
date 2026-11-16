@@ -1,6 +1,6 @@
 # 0009. Métricas con Prometheus, protegidas con un token, y tres tableros en Grafana
 
-**Estado:** vigente en local (docker-compose); en Azure falta decidir cómo llegan las métricas (ver Consecuencias) ·
+**Estado:** vigente en local (docker-compose) y en Azure (un Prometheus en Container Instances, ver [0015](0015-logs-y-alertas-en-docker-y-en-azure.md)) ·
 **Atributos:** observabilidad, seguridad, disponibilidad
 
 **Contexto.** Los tres servicios ya contaban cosas con Micrometer: sesiones, cursos completados, el roadmap y la IA,
@@ -53,10 +53,12 @@ y mirarlo en el tiempo.
   `increase()` y `rate()`, pero un contador que nace con su primer evento (por ejemplo `growlink.roadmap.generaciones`)
   pierde ese primero. Los de sesiones, cursos completados y trivia se registran desde el arranque, en 0.
 - (−) El p95 del tablero es aproximado: se interpola dentro de la cubeta.
-- (−) **En Azure App Service este modelo no funciona tal cual.** Desde afuera, la URL del servicio cae en la
-  instancia que elija el balanceador, así que un Prometheus no puede raspar cada instancia por separado. Pendiente:
-  que cada instancia **empuje** sus métricas (Micrometer con OTLP hacia un colector que escriba en un Prometheus
-  administrado, por ejemplo Azure Monitor managed Prometheus, leído con PromQL desde Azure Managed Grafana). Como la
-  etiqueta `instancia` viaja en cada métrica, los mismos tableros servirían sin cambios.
+- (−) **En Azure App Service, una dirección es una sola instancia para quien la raspa.** Desde afuera, la URL de un servicio
+  cae en la instancia que elija la plataforma, así que no se puede raspar cada una por separado si hay varias detrás de la misma
+  dirección. Se resolvió así (0015): un Prometheus en Azure Container Instances raspa cada una de las cinco apps por su
+  propia dirección (usuarios y cursos tienen una instancia y cada copia de trivia tiene la suya), con el mismo token. Si una app
+  llegara a tener varias instancias detrás de una dirección, habría que hacer que cada una **empuje** sus métricas (Micrometer
+  con OTLP hacia un colector que escriba en un Prometheus administrado); los mismos tableros servirían, porque la etiqueta
+  `instancia` viaja en cada métrica.
 - (−) En Azure la etiqueta `instancia` (`WEBSITE_INSTANCE_ID`) no es el mismo valor que `X-Instancia` y el campo
   `instancia` de los logs (el nombre del contenedor). En local coinciden.

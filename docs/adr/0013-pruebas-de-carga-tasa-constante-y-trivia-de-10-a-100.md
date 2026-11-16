@@ -1,6 +1,6 @@
 # 0013. Pruebas de carga: HTTP a tasa constante y trivia en vivo de 10 a 100 jugadores
 
-**Estado:** vigente (scripts en `scripts/carga`; las corridas en Azure con 1 y 3 instancias están pendientes) ·
+**Estado:** vigente (scripts en `scripts/carga`; medido en Azure el 16 de noviembre con 1 y con 3 copias, ver «Resultado en Azure») ·
 **Atributos:** rendimiento, escalabilidad, disponibilidad
 
 **Contexto.** "Rápido" y "aguanta" no eran números (en `atributos-de-calidad.md` la prueba de carga estaba como
@@ -36,7 +36,7 @@ parte con más concurrencia: muchas personas contestando a la vez, con un candad
   | HTTP, 1 instancia | p95 ≤ 500 ms y ≤ 1 % de fallas a 20 peticiones/s |
   | HTTP, 3 instancias | las mismas metas al triple de tasa (60 peticiones/s) |
   | Recuperación | al apagar 1 de 3 instancias bajo carga, sin fallas después de 60 s |
-  | Trivia | p95 de la respuesta ≤ 300 ms y ≤ 1 % de jugadores sin sus resultados, con 100 jugadores |
+  | Trivia | p95 de la respuesta ≤ 300 ms y ≤ 1 % de jugadores sin sus resultados, con 100 jugadores (**ajustada a ≤ 2 s** después de la primera medición en Azure, ver abajo) |
 
   Línea base en local (12-11-2026, una réplica de cada servicio con H2 y broker en memoria, la carga desde la misma
   máquina): HTTP a 20 peticiones/s, p95 40 ms y ninguna falla; trivia con 100 jugadores, respuesta p50 12 ms, p95
@@ -46,6 +46,14 @@ parte con más concurrencia: muchas personas contestando a la vez, con un candad
   carga sale de una IP y si no lo que se mide es el tope (el reporte avisa si vio 429); y jugadores de mentira con ids
   desde 900000, que no existen en usuarios-service, para no llenarle las estadísticas a las personas de prueba (al
   terminar cada partida queda un aviso en el log de trivia al no poder sumarle la victoria al ganador: es lo esperado).
+
+**Resultado en Azure (16 de noviembre, `scripts/azure/medir-p1.sh`, corrido por Mariana).** Con 1 y con 3 copias de trivia, hasta 100 jugadores
+(cada uno responde entre 0 y 1,5 s después de la pregunta; 10 preguntas de 10 s; salas de 10): 0 errores y 0 jugadores sin resultados. El p95 de la
+respuesta con 100 jugadores fue de **cerca de 1,3 s en las dos, así que la meta inicial de 300 ms no se cumplió.** La meta se ajustó a 2 s con este
+argumento: la pregunta dura 10 s y la persona contesta en el primer segundo y medio, así que 2 s es una quinta parte de la ventana. Con 3 copias mejoró
+el tiempo de conectar y las copias dejaron de caerse (antes eran planes B1 de un solo núcleo, ver 0010). Sumar copias no bajó la latencia. Hipótesis
+sin comprobar: la base de datos y RabbitMQ están en Canada Central y dos de las tres copias en East US y East US 2, y la prueba sale de un computador
+fuera de Azure, así que entran la distancia y el internet de quien mide.
 
 **Consecuencias.**
 - (+) Rendimiento, escalabilidad y disponibilidad quedan con un número y un comando que lo reproduce, y las metas se
